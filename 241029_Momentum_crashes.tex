@@ -1,0 +1,605 @@
+%Master thesis
+%Authors: Alexander Klos and Niklas Reinhardt at QBER, Kiel University
+%Module 3: Example Research Project: Inflation and its Drivers in Germany and the US - streamlined
+
+%Goal: 
+%The purpose of this .tex file is to generate a .pdf of our "master's thesis".
+%In this file, we write the text for the thesis, import the necessary tables, figures, and references, and format the document.
+%This means that in this file, we do everything that we need to do to write a master's thesis (apart from generating the tables and figures, which we already did in R).
+%This version of the file is streamlined to produce a minimalistic example of a thesis (not in terms of content, which this example lacks completely,
+%but rather in terms of the structuring and formatting of the text, tables, and figures).
+%Therefore, this file can serve you as a starting point for writing a thesis with LaTeX.
+
+%Structure: 
+%This file has three sections: setup, parameters, and document.
+%In the setup section, we load the necessary packages and configure the document such that it adheres to the guidelines for theses at QBER.
+%Depending on your requirements, this section likely needs only few, if any, changes by you.
+%In the parameters section, we provide basic information for the document such as the title, the author's name, as well as the file paths to the bibliography and the table and figures that we import.
+%The structure of this section can also likely stay as it is but you need to change the content to match your project (i.e., its title, your name, file paths...).
+%Finally, in the document section, we actually fill the document with life, i.e., we write the main text, include tables and figures, and, in the end, insert the bibliography as well as the appendix.
+%Of course, this section needs to be completely rewritten by you as it contains the content of your thesis.
+%Nonetheless, also the document section contains some parts that you can probably recycle (e.g., the structure of the tables and figures, the end of the document including the bibliography and the appendix).
+
+%How to: 
+%For this file to produce a .pdf file of our thesis, we need to "typeset" the document (the equivalent to running code in R).
+%We need to typeset the document multiple times and in multiple languages.
+%Specifically, we need to typeset LaTeX, BibTeX, LaTeX, LaTeX.
+%Why do we need to do this?
+%In each iteration, auxiliary files are created that are necessary to assemble the final .pdf in a later iteration.
+%You will see these auxiliary files being created in the folder in which your .tex file is stored.
+%For example, with the typeset in BibTeX, a .bbl file is created which contains the list of references that are cited in the document.
+%For the typesetting to work, you have to change the file paths in the parameters section to the folders on your computer which contain the (equally named) files that we import.
+
+%%%%%%%%%%%%%%%%%%%% Setup start %%%%%%%%%%%%%%%%%%%%
+%Document class and standard font size
+\documentclass[12pt]{article}
+
+%Page margins and line spacing
+\usepackage[a4paper, left = 6cm, right = 2cm, top = 3cm, bottom = 3cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing	
+
+%Graphics
+\usepackage{caption}
+
+%Tables with kableExtra
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+
+%Hypotheses
+\usepackage{amsmath}
+\newtheorem{hyp}{Hypothesis}
+
+%Literature
+\usepackage[											%Literature formatting.
+	style = authoryear-comp,
+	giveninits = true,
+	maxcitenames = 3,
+	maxbibnames = 999,
+	uniquelist = false,
+	uniquename = init,
+	sortcites = false,
+	doi = false,
+	isbn = false,
+	url = false,
+	backend = bibtex]{biblatex} 
+
+\DeclareFieldFormat[report]{title}{\mkbibquote{#1}} 				%Titles of working papers printed non-italic and with parentheses.
+\DeclareFieldFormat[report]{titlecase}{\MakeSentenceCase*{#1}}	%Titles of working papers in sentence case.
+
+\DeclareCiteCommand{\textcite} 			  				%Links of text citations contain authors.
+ {\boolfalse{cbx:parens}}
+  {\usebibmacro{citeindex}%
+    \printtext[bibhyperref]{\printnames{labelname}%
+      \printtext{ (\printfield{year}\printtext{)}}}}
+ {\ifbool{cbx:parens}
+  {\bibcloseparen\global\boolfalse{cbx:parens}}
+  {}%
+ \multicitedelim}
+{\usebibmacro{textcite:postnote}}
+  
+\DeclareCiteCommand{\parencite}[\mkbibparens] 				%Links of parentheses citations contain authors.
+  {\usebibmacro{prenote}}
+  {\usebibmacro{citeindex}%
+    \printtext[bibhyperref]{\usebibmacro{cite}}}
+  {\multicitedelim}
+  {\usebibmacro{postnote}}
+
+%Title page
+\usepackage{titling}
+\settowidth{\thanksmarkwidth}{*}							%Formatting of footnotes on title page.
+\setlength{\thanksmargin}{-\thanksmarkwidth}
+
+%Links and display of references 
+\usepackage[linktoc=all]{hyperref}
+\hypersetup{											%Set the link color to black for the title page, table of contents, list of tables, and list of figures.
+	colorlinks,		
+	citecolor = black,
+	filecolor = black,
+	linkcolor = black,
+	urlcolor = black
+}
+\usepackage[nameinlink]{cleveref}
+\crefname{hyp}{Hypothesis}{Hypotheses}						%Display references to hypotheses as "Hypothesis".
+\def\sectionautorefname{Section}							%Display references to sections, subsections, and subsubsections as "Section".
+\def\subsectionautorefname{Section}
+\def\subsubsectionautorefname{Section}
+
+%Avoid widow and orphan lines (single lines of a paragraph on another page)
+\clubpenalty = 10000
+\widowpenalty = 10000
+\displaywidowpenalty = 10000
+%%%%%%%%%%%%%%%%%%%% Setup end %%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Parameters start %%%%%%%%%%%%%%%%%%%%
+%Title page information
+\title{Momentum Crashes \thanks{Master Thesis submitted to Prof. Dr. Alexander Klos at Kiel University. 
+														Supervisor: Prof. Dr. Alexander Klos \n Prof. Dr. Reitz}}
+						 
+\author{Mirko Smit\thanks{Student ID: 1177112, Semester: 5,
+						 Field of Study: Business Administration,
+						 Address: Kronshagener Weg 6, 24103 Kiel, Germany,
+						 E-Mail Address: mirko.smit@mail.uni-kiel.de}}
+
+%Bibliography
+\addbibresource{/Users/mirkosmit/Documents/CAU/4.Semester/Selected_Topics_in_Finance/References/Master_Thesis.bib}  % muss noch angepasst werden!!!!! 
+
+%Paths to tables and figures and the declaration of authorship
+\newcommand{\mypathtabfig}{/Users/mirkosmit/Documents/CAU/Master_Thesis/Output}
+\newcommand{\mypathdeclaration}{/Users/mirkosmit/Documents/CAU/4.Semester/Selected_Topics_in_Finance/Outputs}
+
+%%%%%%%%%%%%%%%%%%%% Parameters end %%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Document start %%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+%Title page
+\maketitle
+
+
+\clearpage
+
+%Table of contents
+\tableofcontents
+\clearpage
+
+%List of tables and list of figures
+\listoftables
+\listoffigures
+\clearpage
+
+%Table of abbreviations and table of symbols
+{\noindent \Large \textbf{Table of Abbreviations} \vspace{0.3cm}}								%Text with large font size in boldface with some vertical space -> serves as table heading.
+\begin{table}[!h]																		%Insert a table.
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{5cm}>{\raggedright\arraybackslash}p{7cm}}		%Two left-aligned columns with 5cm and 7cm width.
+	\textbf{Abbreviation} & \textbf{Explanation} \\											%First row of the table in bold face.
+	\hline																		%Horizontal line.
+	IDE & Integrated Development Environment\\														%Second row of the table (first abbreviation entry).
+	TBASE & Baseline Treatment \\										%Third row of the table (second abbreviation entry).
+	TRANK & Ranking Treatment\\
+	TTOUR & Tournament Treatment\\														%Forth row of the table (third abbreviation entry).
+	\end{tabular}
+\end{table}
+
+{\noindent \Large \textbf{Table of Symbols} \vspace{0.3cm}}
+\begin{table}[!h]
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{5cm}>{\raggedright\arraybackslash}p{7cm}}
+	\textbf{Symbol} & \textbf{Explanation} \\
+	\hline
+	$R^{2}$ & Coefficient of Determination \\
+	$\%$ & Percentage \\
+	$RET\_PF_{t-1}$ & Return of the Portfolio from $t-1$ periods ago\\
+	$RET\_PF_{t-2}$ & Return of the portfolio from $t-2$ periods ago\\
+	$Ret\_ASSET_{t-1}$& Return of the risk-free asset from $t-1$ period ago\\
+	$Ret\_ASSET_{t-2}$ & Return of the risk-free asset from $t-2$ period ago\\ $
+	$RANK_{t-1}$ & Ranking within group from $t-1$ periods ago\\ 
+	$RANK_{t-2}$ & Ranking within group from $t-2$ periods ago\\ 
+	N & Number of Observations
+	\end{tabular}
+\end{table}
+
+%Some final settings for the main text
+\clearpage
+\hypersetup{																		%Reset the link color to blue for the main text.
+    citecolor = blue,
+    filecolor = blue,
+    linkcolor = blue,
+    urlcolor = blue
+}
+
+%Main text\section{Introduction} \label{section:introduction}
+\section{Introduction}
+Behavior under pressure and competitive circumstances is essential to understanding what influences decision-making. In their paper, \textcite[p.~2295]{Kirchler2018} conduct several studies dealing with this behavior. They take a deeper look into the behavior of financial professionals and how their behavior changes in differing situations. These include round-based field tests in which professionals invest for themselves or close relatives. In addition to that, the circumstances also change. This means that in one study, the professionals can perceive and compare their performance to those of the other professionals participating. In one study, the relative performance is related to the final reward the participant receives; in another, it is not. Overall \textcite{HAIGH2005} find that ranking professionals show behavior with increased risk-taking when they can perceive their rank and have shown a subpar performance in the previous rounds. Nevertheless, the professionals also showed increased risk-taking when they could not perceive their relative performance, but they showed relatively weak performance from their point of view. \par
+For comparison purposes, the authors conducted the same study again with students. Students exhibited increased risk-taking with decreasing performance but not in scenarios with good performance. This paper aims to examine and validate these findings. Upon validation of the main findings, this paper will put the findings into perspective with related literature in this field of study. Further, this paper will extend beyond pure replication and investigate the mid-term effects of rankings on risk-taking.
+\par
+
+\section{Literature Review} \label{section:literature_review}
+This section will provide the definition of the terms that determine a crucial part of the research that is presented in the subsequent sections. Therefore, this section will provide a definition of stock returns, momentum strategy, and conditional volatility as defined by a GARCH model.
+
+\subsection{Efficient Market Hypothesis} \label{subsection:EMH}
+For the assessment of a portfolio it is essential to determine (daily) stock returns. The stock returns are the differences between the stock prices from one day to the next \parencite{Tsay2002}. As basis for this study are logarithmic daily returns (log returns). These can be estimated as follows \parencite{Tsay2002}: 
+INSERT FORMULA HERE
+
+\subsection{Momentum Theory} \label{subsection:Momentum_theory}
+INSERT DEF ABOUT MOMENTUM STRAT
+
+\subsection{Momentum Reversal} \label{subsection:Momentum_reversal}
+
+
+\subsection{Hypothesis Development} \label{subsection:Hypotheses}
+
+
+\section{Methodology} \label{section:Method}
+
+\subsection{Data} \label{subsection:Data}
+
+
+
+
+The Generalized Autoregressive Conditional Heteroscedasticity (GARCH) model is an autoregressive model to estimate the conditional volatility of a time series introduced by Tim Bollerslev in 1986. It was inferred as it delivers more parsimonious results that the ARCH model that was previously used. 
+
+
+\section{Rankings and Risk-taking in Finance} \label{section:rankings}
+This section will discuss the main findings of the paper presented by \textcite{Kirchler2018}. The goal is to replicate the findings in order to assess them qualitatively. This entails separate data preparation and model estimation using different software.
+Traits of the data, significant steps in data preparation, and model estimation are laid out for traceability. After the steps are laid out, the final results are compared with those presented in \textcite{Kirchler2018}. Major graphs are replicated, too, but depicted in the appendix for oversight.
+Next, the replication results will be compared with the results in the paper. Potential deviations and choices made by the authors will be discussed. Subsequently, the paper's findings will be put in context. Therefore, this paper will examine current research and discuss whether its conclusion aligns with recent findings.
+
+
+\subsection{Experiment} \label{subsection:experiment}
+The main goal of the paper presented by \textcite{Kirchler2018} is to investigate the reasons for \textit{excessive} risk-taking in the finance industry. As a potential influencing factor, they determine \textit{tournament factors} such as \textit{rank incentives} and \texit{monetary incentives}. Since financial professionals receive either recognition or financial rewards based on their absolute and relative performance, these factors may influence decision-making \parencite{Charness2014}. To test the influence of these factors on the risk-taking of finance professionals, \textcite{Kirchler2018} carried out a field experiment and an online experiment for advanced information control. The lab-in-the-field experiment was carried out with 657 professionals and 432 students. The students served as a control group as they were not actively carrying out jobs in the finance industry. The setup of this experiment is a round-based investment game. The investment games are divided into three treatments. In the baseline treatment \textit{TBASE}, the participants had to build a portfolio of a risky and risk-free asset for eight periods. After every round, the participants were allowed to adjust their portfolio according to their preferences. This treatment provided incentives linearly according to the participant's final wealth. The built-up of the ranking treatment \textit{TRANK} was precisely the same as in \textit{TBASE}, but the participants additionally received anonymous feedback on their ranking. However, the ranking among peers was not relevant for the final payout. As part of the tournament treatment \textit{TTOUR}, the ranking remained anonymous but was relevant for the final payout. The treatments were alike for professionals and students. Nevertheless, the stakes were lowered for the students to mimic proportional stakes to the group of professionals. In addition, the online experiment was carried out with financial professionals. This additional experiment was adapted to identify whether a specific risk-taking behavior is linked to their professional identity. They adapt the study layout presented by \textcite{Kuziemko2011}. In groups of six, a decreasing starting budget was randomly assigned to each group member. The participants could choose whether to receive a certain amount of  2.25 EURO or partake in a lottery that wins 9 EURO with a probability of 75\% or loses 18 EURO with a probability of 25\%.  After three periods, the game ends, and the final wealth is paid out with a 20\% probability. Parallel to the lab-in-the-field study, the online study was divided into two treatments. Participants of treatment one were told that they were acting and competing in a market of non-professionals. In contrast, participants of treatment two were told that they were competing against other financial professionals. 
+\par
+After evaluating and analyzing the results of these studies, \textcite{Kirchler2018} find that rankings and monetary incentives for performance significantly influence risk-taking behavior in professionals. Underperforming professionals are especially willing to take risks in lab-in-the-field and online study. According to their online study, this behavior is robust to changing circumstances. This indicates that professionals show an increased risk-taking behavior even without competitive surroundings. On the other hand, students are not generally incentivized to take more risks by observing their rankings. Nevertheless, in the case of monetary compensation for an increased relative performance, students also show increased risk-taking behavior.
+
+
+\subsection{Replication} \label{subsection:replication}
+After summarizing the findings of \textcite{Kirchler2018} in \autoref{subsection:experiment}, this section will examine and replicate the modeling approach. First, this paper will review the data preparation steps and discuss data availability and replicability. Lastly, the replication results will be discussed and compared to the paper's results.
+This will be followed by a discussion that puts the results into context backed by current literature. For replication purposes, the statistics software R is used. The official replication code that is publicly available is written in Stata.
+
+\subsubsection{Data and Modeling} \label{subsubsection:data_modeling}
+This section will retrace the steps that must be taken to replicate the result of \textcite{Kirchler2018}. The publicly available data provided by the authors are used for replication purposes.
+The online appendix and the data and replication kit can be retrieved from the Wiley online library website.\footnote{
+See \href{https://onlinelibrary.wiley.com/doi/abs/10.1111/jofi.12701}{onlinelibrary.wiley.com}, as of May 22, 2024.}
+The replication kit consists of several z-Tree documents which can be executed to fill out the surveys or to execute the experiment. Also, the data set for the field experiment and the online experiment are provided, as well as the replication code in a .dta file. However, the starting comments of the replication code mention that solely the student data is available for the lab-in-the-field experiment due to a non-disclosure agreement. Therefore, this study will only replicate the findings regarding the students. The data from the online experiment is available in full. Data for replicating the bar chart for the lab-in-field experiment is provided in a separate file.
+\par
+The data is collected in a wide table format for the lab-in-the-field experiment. The data set provides information about the subject ID, group ID, rank in period t, the logarithmic return, age, percentage invested into the risky asset, portfolio return, performance indicator, and dummies for each treatment type. However, the encoding of the dummies for calculating the factors "HIGH" and "LOW" is unclear. The data is clear of missing values, aside from the \textit{N/A} values that emerge from shifting the data to calculate the returns and rank changes for each period. Thus, for the fitting of each model, the respective treatment is selected, and all previously mentioned \textit{N/A} values are removed from the data. At the start of the replication code, the authors define all variables included in the data set. They define the variable low as 1 = Underperformer and 0 = Overperformer. An inspection of the data finds that encoding the dummies in the data provided is inverted. This does not have any implications for the final findings, but it must be kept in mind to reference the correct data. In order to analyze the data, \textcite{Kirchler2018} run a random-effects panel regression with an AR(1) disturbance. Unfortunately, the standard library for panel regressions \textit{plm} in R does not include the option to include AR(1) disturbances. Therefore, the panel regression is run with the help of the \textit{NLME} library by \textcite[p.~143-145]{NLME}, which allows for mixed-effect models, including ARMA disturbances. The model is replicated by fitting the model assuming fixed effects for the independent variables and random effects for each participant.  Alternatively, one could assume random effects for more variables than per participant. As a coefficient of determination, the results by \textcite[p.~2284]{Kirchler2018} state $R^{2}$ values. The authors do not define which specific $R^{2}$ measurement is taken to evaluate the models. As an evaluation metric, this replication will include Nakagawa's $R^{2}$, which is adapted to evaluate mixed-models \parencite[p.~2]{Nakagawa2017}. The p-values are estimated with Wald-tests, as the paper states no different approach and increased simplicity and computational speed \parencites[p.~91]{sjPlot}[p.~2284]{Kirchler2018}.
+ \par
+ The data of the online experiment is also structured in a wide table format. It consists of data describing the priming (private or professional), initial ranking, sex, and lottery choice. It includes additional dummy variables for each rank that has been attributed prior to the start of the competition. The data does not need further preparation and can instantly be used to replicate the results. The data is analyzed by implementing a $probit$-model using the function $glm$ provided by the $stats$ R library, which is part of the standard installation package of R. In their results, \textcite{Kirchler2018} do not refer to which pseudo-$R^{2}$ measure they use to evaluate the presented models. After calculating several pseudo-$R^{2}$ measures, it became clear that they used McFadden's $R^{2}$. The replication results will additionally list Nagelkerke's $R^{2}$ for comparison and robustness check as both are adjusted for generalized linear models \parencite[p.~503]{Cohen2003}. As for the lab-in-the-field data, the data had to be filtered by priming in order to replicate the results. Unfortunately, the description of the variable $prime$ is not entirely correct. The variable description provided in the replication code states that if the value of the dummy variable equals 1, the participant is part of the private priming, and the dummy variable equals 0 when the participant has been part of the professional priming. However, after comparing regression results, it becomes clear that the actual encoding is reversed. Thus, the dummy variable prime taking the value 1 symbolizes private priming, while the value 0  symbolizes professional priming.\par
+ After reviewing the data and methodology, \autoref{subsubsection:results} will compare the original analysis and the replication results. Possible future replications or discussions may need to adjust these dummy variables.
+ 
+\subsubsection{Results} \label{subsubsection:results}
+
+First, this chapter will focus on the replication results of the lab-in-the-field study conducted with the students \parencite[p.~2284]{Kirchler2018}. Continuing from that, the replication of the online study with the professionals will be presented and compared to the original computations. Lastly, the empirical implications of these findings will be discussed. \par
+\autoref{tab:maintab1} shows the results of the replication as pointed out in \autoref{subsubsection:data_modeling}. The first part of the table shows the first three regression results that solely focus on the three types of treatment $TBASE$, $TRANK$, and $TTOUR$. The independent variables in these regressions are $RET\_PF_{t-1}$, the one-day portfolio return, and \textit{$Ret\_ASSET_{t-1}$}, the one-day return of the risk-free asset, in which the participants could construct their portfolio from. The regression results show that the coefficient \textit{$RET\_PF_{t-1}$}  is negative and highly significant. In contrast, the coefficient \textit{$Ret\_ASSET_{t-1}$} is negative but not significant for all three treatments. This indicates that the portfolio's return in the prior is relevant in cases in which rankings are not payout-relevant and in cases in which they are payout-relevant. The replication results show minor differences compared to the original results. The coefficients and standard errors slightly deviate from what is reported by \textcite[p.~2284] {Kirchler2018}. Especially the $R^{2}$ values computed in the replication are consistently higher than the ones reported originally.  \autoref{tab:maintab1} shows the replication results of the regressions focusing on the performance in the previous period. Regression $(4)$ takes all observations into account, regression $(5)$ the observations in which the participants held a rank in the previous period that was classified as high performing, and regression $(6)$ considers the observations in which the participants held a rank in the previous period that was classified as low performing. The coefficients computed for the regressions $(4)$, $(5)$, and $(6)$ also deviate slightly from the coefficients depicted in the original paper. Nevertheless, the pattern stays the same across the data. As in regressions (1), (2), and (3), the intercept $\alpha$ is highly significant. Again, the coefficient \textit{$RET\_PF_{t-1}$} is negative and highly significant, indicating an inverse relationship between portfolio return and the percentage invested into the risky asset. In line with the previous results, the coefficients for \textit{$Ret\_ASSET_{t-1}$} are negative but not significant at a level of p\textless0.05. The added independent variable \textit{TRANK} is not statistically significant in explaining the percentage invested in the risky asset for any of the three models. On the other hand, the variable \textit{TTOUR} is a highly significant predictor in all three models, although it shows less significance in model (5). Its coefficients are 33.241 for the model considering all observations, 15.418 for the model considering participants that overperformed in the previous period, and 41.017 for the model that investigates participants that showed a relative underperformance in comparison to their peers in the previous period. The replication model of (5) assigns a higher significance of p\textless0.001 to \textit{$RET\_PF_{t-1}$} than reported in the original calculations, but a lower significance at a p\textless0.01 to the coefficients of \textit{TTOUR}. Nevertheless, this indicates a strong positive relationship between the tournament environment in which the final ranking is payout relevant and the percentage of the risky asset in the portfolio. The $R^{2}$ values differ slightly. The replication results show higher $R^{2}$ values, possibly due to differences in the calculation method.
+
+\begin{table}[h]											
+	\caption{\label{tab:maintab1} Part 1 of the Replication of main results presented in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (1) & (2) & (3)  \\ 	
+	 \textit{\% Risky Asset} & TBASE & TRANK & TTOUR \\	  	  
+	\midrule	
+ 	\alpha & 73.802*** & 79.003*** & 107.152***\\
+	& (4.219) & (4.439) & (4.317)  \\
+	$RET\_PF_{t-1}$ & -0.440*** & -0.333*** & -0.397*** \\
+	&  (0.066) & (0.073) & (0.077) \\
+	$Ret\_ASSET_{t-1}$ & -0.003 & -0.058 & -0.053\\
+	&(0.077)&(0.092)&(0.127)\\
+	N & 1008 & 1008 & 1008 \\
+	$R^{2} Nakagawa$ & 0.157 & 0.069 & 0.083 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(1) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+\begin{table}[!h]	
+	\caption{\label{tab:maintab3} Part 2 of the Replication of main results presented in \textcite{Kirchler2018}}										
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (4) & (5) & (6)  \\ 	
+	 \textit{\% Risky Asset} &  ALL & HIGH & LOW \\	  	  
+	\midrule	
+ 	\alpha  & 73.748*** & 75.205*** & 74.825*** \\
+	&  (4.311) & (5.384) & (5.049)  \\
+	$RET\_PF_{t-1}$ & -0.402*** & -0.267*** & -0.471*** \\
+	&  (0.042) &(0.072) & (0.058) \\
+	$Ret\_ASSET_{t-1}$ & -0.032 & -0.071 & -0.090\\
+	& (0.057) & (0.080) & (0.086)\\
+	TRANK & 5.596 & 0.589 & 7.252 \\
+	& (6.102) & (7.437) & (6.927) \\
+	TTOUR & 33.241*** & 15.418* & 41.017*** \\
+	& (6.094) & (7.444) & (6.931)\\
+	N & 3024 & 1512 & 1512 \\
+	$R^{2} Nakagawa$  & 0.164 & 0.055 & 0.141 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(1) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+
+The outstanding regression results are shown in \autoref{tab:maintab2}. The models are precisely the same models as in (1), (2), and (3) but have an added independent variable \textit{$RANK_{t-1}$}. \textit{$RANK_{t-1}$} represents the numeric rank the participant held in period t-1. Overall, the coefficients, significance, and directions are consistent with the findings of the original paper. Most of the coefficients do not carry the same value in the replication results, which may be due to small deviations in the calculation, which may arise due to switches in software and libraries or specifications of the model. Also, the magnitude of standard errors and significance levels vary slightly. The coefficient for \textit{$RET\_PF_{t-1}$} is statistically significant at a p\textless0.001 level in the original paper but shows a lowered significance at the p\textless0.01 in \autoref{tab:maintab2} resulting from the replication. Consistent with models (1), (2), and (3), the intercept $\alpha$ is highly significant, and \textit{$RET\_PF_{t-1}$} is negative and highly significant. The coefficient \textit{$RANK_{t-1}$} is positive in all models but solely achieves statistical significance in the model (9) with the \textit{TTOUR} treatment. Because the internet appendix already provides prepared data for creating the associated graphic, it is not shown here but as \autoref{fig:linechart1} in the appendix.
+
+
+\begin{table}[!h]											
+	\caption{\label{tab:maintab2}Part 3 of replication of main results presented in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (7) & (8) & (9)  \\ 	
+	 \textit{\% Risky Asset} & TBASE & TRANK & TTOUR \\	  	  
+	\midrule	
+ 	\alpha & 70.250*** & 73.886*** & 69.354***\\
+	& (6.456) & (6.628) & (7.154)  \\
+	$RET\_PF_{t-1}$ & -0.420*** & -0.302*** & -0.212** \\
+	&  (0.072) & (0.078) & (0.080) \\
+	$Ret\_ASSET_{t-1}$ & -0.011 & -0.075 & -0.162\\
+	&(0.078)&(0.094)&(0.125)\\
+	$RANK_{t-1}$ &1.023 & 1.413&10.826***\\
+	&(1.404)&(1.358)&(1.657)\\
+	N & 1008 & 1008 & 1008 \\
+	$R^{2} Nakagawa$ & 0.158 & 0.072 & 0.138 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(1) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+In contrast to the lab-in-the-field study, the result of the replication ended up with the exact coefficients as they were published in the original paper \parencite[p.~2295]{Kirchler2018}. The regression findings are depicted in \autoref{tab:apptab4}, \autoref{tab:apptab5}, and \autoref{tab:apptab6} in the appendix. Consequently, the directions of coefficients and the statistical significance of coefficients are consistent. Nevertheless, the magnitude of standard errors and significance levels differ. The replication finds higher standard errors and, thus, lower significance levels. Especially the coefficient \textit{RANK} achieves a lower statistical significance in the model (2) with participants that were subject to professional priming and no statistical significance in the model (3), which considers participants with private priming and the sex of participants as independent variables. It is important to note that the direction of the coefficient \textit{RANK} is consistently positive. However, this weakened statistical significance might occur due to including statistically non-significant independent variables in the model (3). The same effect is depicted in the model (4) with the \textit{$TRANK^{FIN}$} priming. Model (5) takes into account all participants for which the intercept $\alpha$ and \textit{RANK} achieve statistical significance. Further are the specific rankings investigated by model (6) and model (7). In both model estimations, the coefficients for \textit{RANK = 5} are positive and significant. Despite equal coefficient estimations the significance levels differ heavily for the coefficients of  \textit{RANK = 4} and \textit{RANK = 6}. While the results in \textcite[p.~2295]{Kirchler2018} indicate a statistical significance for \textit{RANK = 4} and \textit{RANK = 6} in the model (7), the model estimation in this replication finds no statistical significance for either. This might be due to different computational approaches for this statistic. Nonetheless, the findings are still consistent. Note that all the coefficients for all starting ranks show a positive direction apart from \textit{RANK = 2}.  \textit{RANK = 5} shows the highest coefficients with values equal to 0.705 and 0.629 for model (5) and model (6). Moreover, the model could reproduce $R^{2}$ values that match exactly. The regression table additionally shows the $R^{2}$ according to the approach of Nagelkerke that is adjusted in such a way that the maximum value can attain 1 \parencite[p.~503]{Cohen2003}.
+Following the presentation of the replication results, the next section will discuss the implications of the findings about their consistency.
+
+\subsubsection{Discussion of Findings} \label{subsubsection:discussion_findings} 
+The replication of results was mainly successful, considering some leeway for deviations due to the change in the statistical program. For most coefficients, the results were similar to those presented by \textcite{Kirchler2018}. Unfortunately, the reproduction of the results of the lab-in-the-field experiment was limited to the student sample. Consequently, the results presented in this study cannot express a statement about the robustness of the findings of the sample, including the professionals and the direct comparison of both groups. However, the results consistently indicate an inverse relationship between portfolio return and the willingness to invest in a risky asset. This can especially be pointed out for students who are relatively underperforming in a competitive environment where their rank is relevant for the final payout. A non-competitive environment shows contrasting results, as the coefficients for other treatments do not show any significance. This reproduction study could show the robustness and reproducibility of the model presented by \textcite{Kirchler2018} that a negative return in students' investment portfolios statistically impacts their financial risk-taking. \par
+The results of the online experiment were reproducible. Reproducing the findings indicates that the observation of rankings has a statistically significant impact on professionals' willingness to take financial risks. This is especially true when professionals are ranked relatively worse than their competitors. Priming does not seem to matter, as this behavior can be found in both private and professional settings. This supports the hypothesis of  \textcite{Kirchler2018} that professionals incorporate their professional identity even in a private setting. No differences between the females and males were observed. \
+
+
+\subsection{Positioning of Findings in Literature} \label{subsection:positioning}
+After an empirical analysis of the findings, this section will briefly examine the current literature and evaluate the findings adequately in a field experiment by \textcite{Krull2024}, in which the participants first had to answer a survey on their financial literacy and were ranked accordingly \parencite[p.~4]{Krull2024}. In the study by \textcite[p.~4]{Krull2024},the participants were paid according to their performance but had to decide afterward how much of their winning fee they wanted to invest in a risky asset. They found that participants with a lower ranking and thus lower compensation showed higher levels of risk-taking, going hand-in-hand with the findings of \textcite{Kirchler2018} \parencite[p.~12]{Krull2024}. Another empirical study supporting these findings is investigating the effect of competition on risk-taking \parencite{Gürtler2023}.  In their study, they propose a model linking heightened competitive pressure to an increased willingness to take risks. \textcite[p.~8]{Gürtler2023} test the mentioned model on empirical data of professional biathlon athletes that competed in the IBU World Championship in 2017. Their findings support the hypothesis that increased competition leads to an increased willingness to take risks and claim that this might be transferable to employees within a firm. If such a model could be transfered onto financial professionals, it could explain increased risk-taking when solely observing a ranking that is not payout relevant as in treatment TRANK. Nevertheless, its applicability remains unclear. \textcite{Gillenkirch2018} conducted a study to gain further insight into the risk-taking behavior of agents. \textcite[p.~17]{Gillenkirch2018} conducted their study under the premise of an agent receiving the power for the decision-making of an investment project \parencite[p.~5]{Gillenkirch2018}. \textcite[pp.~5-17]{Gillenkirch2018} simultaneously simulated several periods with 288 participants in which more risky and less risky investment decisions could be taken. The investment preference of the principal was communicated to the agent while he could observe his ranking within his respective group of agents. In addition, \textcite[p.~5]{Gillenkirch2018} made the final ranking of the agent was relevant for the payout of the agent. \textcite[p.~26]{Gillenkirch2018} found that with a relatively poor ranking, agents started to make more irrational and risky decisions, throwing their previously communicated risk preferences overboard. Another field study, published in the same year, investigated the personality traits of financial professionals and compared them to the general population \parencite{Holmen2023}. To analyze the personality traits of the financial professionals and non-professionals in Sweden, \textcite{Holmen2023} created a fictional lottery. In this lottery participated 298 ﬁnance professionals and 395 people who work in other sectors. All participants in this study received six choice lists, in which specific parts of the lottery stayed changed, and others stayed constant to identify specific personality traits. These choice lists handed out by \textcite[p.~2954]{Holmen2023} were evaluated ex-post with, among others, the Big Five personality test. As a result, they assess financial professionals as less risk averse, more competitive, and more narcissistic than people from the general population \parencite[p.~2972]{Holmen2023}. The studies by \textcite{Holmen2023} and \textcite{Gillenkirch2018} provide valuable findings that support the hypothesis that financial professionals tend to act riskier under competition than the general population or students. Although current literature is still investigating this topic manifold, it can be said that it generally supports the hypothesis that financial professionals are prone to increased risk-taking while observing rankings among peers.
+
+\section{Extension} \label{section:extension}
+Even though the results of the study by \textcite{Kirchler2018} indicate a short-term effect of rankings and monetary incentives on the risk-taking of professionals and students. Nonetheless, these results do not describe the implications of risk-taking in investment behavior beyond this short period. Addressing this issue, this study will model the implications of rankings over two periods. Based on the lab-in-the-field student data provided in the internet appendix by \textcite{Kirchler2018}, this study will implement a random-effects panel regression with AR(2) disturbances considering the return of the portfolio and risky asset over two periods, as well as ranking over two periods. The random unit will be each participant, as specified in \autoref{subsubsection:data_modeling}. As the main focus of this study lies on the reproduction and validation of the findings of \textcite{Kirchler2018}, the results of the regression are visualized in the appendix in \autoref{tab:extensiontab1} and \autoref{tab:extensiontab2}. Overall, the results of the regressions are very similar to those discussed in \autoref{subsubsection:results}. All intercepts are significant. As in the regression considering the short-term implications, the coefficient for the return of the portfolio \textit{$RET\_PF_{t-2}$} is statistically significant in all models apart from the model (5) that considers only participants that show underperformance in relation to their group average. In model (9) that considers the \textit{TTOUR} treatment, the coefficient \textit{$RANK_{t-2}$} is positive and statistically significant. Unfortunately, the models' $R^{2}$ statistics are generally lower than those that consider the short-term effects, indicating a lower goodness-of-fit of the models. Nevertheless, the results of the extension provide a slight indication that rankings' effects on students' financial risk-taking might expand over a time span of a single period. Evidently, these results can only serve as minor evidence since the experiment was not created to serve as a base for this extension.
+
+\section{Conclusion} \label{section:conclusion}
+This replication study was able to confirm the robustness and reproducibility of the results for the student sample of the lab-in-field experiment and the online study with financial professionals published by \textcite{Kirchler2018}. The results were generally reproducible despite minor deviations due to differing computational approaches. This indicates that the financial risk-taking of students is inversely related to their return on risky assets. Additionally, a competitive environment where rankings are payout-relevant leads to an increased risk-taking behavior in underperforming students. The replication of the online study has confirmed that there is consistent evidence that professionals tend to invest riskier if they perform relatively worse than their competitors independently, whether in a private or professional environment. Current literature supports the hypothesis by \textcite{Kirchler2018} of financial professionals showing less risk aversion and being more competitive than students. Additionally, this study provided an slim extension of the approach presented by \textcite{Kirchler2018}. It provides minor indications of the influence of rankings on risk-taking that spans over subsequent periods. However, this solely gives an indication and could give grounds for further research on this topic.
+
+
+
+
+%Bibliography
+\clearpage
+\printbibliography[heading = bibintoc] 		%Insert the bibliography and make an entry for the bibliography in the table of contents.
+
+%Appendix
+\clearpage
+\setcounter{secnumdepth}{0}				%Remove the section number before "Appendix" and "Declaration of authorship" in the table of contents.
+\setcounter{table}{0}						%Restart the numbering of tables.
+\renewcommand{\thetable}{A\arabic{table}}	%Insert an "A" before the number of the table.
+\setcounter{figure}{0}						%Restart the numbering of figures.
+\renewcommand{\thefigure}{A\arabic{figure}}	%Insert an "A" before the number of the figure.
+\section{Appendix} 
+
+\begin{figure}[h] 																		
+	\caption{Ranks and Risk taking in the experiment STUD} \label{fig:linechart1}					
+    	\makebox[\textwidth]{\includegraphics[width=\textwidth]{\mypathtabfig/Line_exp_stud.pdf}}			
+    	\textit{Note:} This figure is a reproduction of the figure shown in the original paper by \textcite{Kirchler2018}.
+\end{figure}
+
+\clearpage
+
+\begin{figure}[h] 																	
+	\caption{Ranks and Risk taking in online experiment with PROF} \label{fig:linechart2}					
+    	\makebox[\textwidth]{\includegraphics[width=\textwidth]{\mypathtabfig/Line_online_prime.pdf}}			
+    	\textit{Note:} This figure is a reproduction of the figure shown in the original paper by \textcite{Kirchler2018}.
+\end{figure}
+
+\clearpage
+
+\begin{figure}[h]																		
+	\caption{Ranks and Risk taking by sex in online experiment with PROF} \label{fig:linechart3}					
+    	\makebox[\textwidth]{\includegraphics[width=\textwidth]{\mypathtabfig/Line_online_prime_female.pdf}}			
+    	\textit{Note:} This figure is a reproduction of the figure shown in the original paper by \textcite{Kirchler2018}.
+\end{figure}
+
+
+
+\clearpage %Put tables on a new page.
+
+\begin{table}[!h]											
+	\caption{\label{tab:apptab4}Part 1 of replication of online study results with PROF in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: \textit{Risk} & (1) & (2) & (3)  \\ 	
+	\textit{Choice of lottery} & $TRANK^{PRIV}$ & $TRANK^{FIN}$ & $TRANK^{PRIV}$\\	  	  
+	\midrule	
+ 	\alpha & -0.274* & -0.200 & 0.149\\
+	& (0.134) & (0.135) & (0.181)  \\
+	RANK & 0.128*** & 0.105** & 0.089 \\
+	&  (0.040) & (0.035) & (0.047) \\
+	FEMALE &  & & -0.280\\
+	& & &(0.272)\\
+	RANK*FEMALE & & &0.088\\
+	& & &(0.070)\\ 
+	N & 456 & 453 & 456 \\
+	$R^{2} Nagelkerke$ & 0.039 & 0.027 & 0.044 \\
+	$R^{2} McFadden$ & 0.0218 & 0.0146 & 0.0243 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:} * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+\clearpage
+
+\begin{table}[!h]											
+	\caption{\label{tab:apptab5}Part 2 of replication of online study results with PROF in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: \textit{Risk} && (4) & (5)  \\ 	
+	\textit{Choice of lottery} && $TRANK^{FIN}$  & ALL \\	  	  
+	\midrule	
+ 	\alpha && -0.248 & -0.274* \\
+	& &(0.188) & (0.135)  \\
+	RANK& & 0.111* & 0.128*** \\
+	&  &(0.049) & (0.035)  \\
+	FEMALE && 0.098 & \\
+	& &(0.271)& \\
+	RANK*FEMALE& &-0.013 & \\
+	&&(0.070) & \\ 
+	$TRANK^{FIN}$ & & &0.074\\
+	& &&(0.191)\\
+	$TRANK^{FIN}$*RANK && &-0.024\\
+	& & &(0.050) \\
+	N && 453 & 909  \\
+	$R^{2} Nagelkerke$ && 0.027 & 0.033  \\
+	$R^{2} McFadden$ && 0.0149 & 0.0182 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:} * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+\clearpage
+
+\begin{table}[h]											
+	\caption{\label{tab:apptab6}Part 3 of replication of online study results with PROF in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: \textit{Risk} && (6) & (7)  \\ 	
+	\textit{Choice of lottery} && $TRANK^{PRIV}$  & $TRANK^{FIN}$ \\	  	  
+	\midrule	
+ 	\alpha && -0.199 & -0.136 \\
+	& &(0.144) & (0.146)  \\
+	RANK = 2 && 0.265 & -0.011\\
+	& & (0.204) & (0.205)  \\
+	RANK = 3 && 0.350 & 0.485* \\
+	& & (0.205) & (0.207)  \\
+	RANK = 4 && 0.281 & 0.341 \\
+	&&  (0.204) & (0.207)  \\
+	RANK = 5 && 0.705*** & 0.629** \\
+	& & (0.210) & (0.211)  \\
+	RANK = 6 && 0.654** & 0.383 \\
+	& &  (0.207) & (0.205)  \\
+	N & &456 & 453  \\
+	$R^{2} Nagelkerke$ && 0.047 & 0.046  \\
+	$R^{2} McFadden$ && 0.0261 & 0.0254 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:} * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+\begin{table}[!h]											
+	\caption{\label{tab:extensiontab1} Part 1 of the Extension of main results presented in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (1) & (2) & (3)  \\ 	
+	 \textit{\% Risky Asset} & TBASE & TRANK & TTOUR \\	  	  
+	\midrule	
+ 	\alpha & 72.969*** & 78.453*** & 107.966***\\
+	& (4.419) & (4.629) & (4.388)  \\
+	$RET\_PF_{t-2}$ & -0.2075** & -0.2230* & -0.149 \\
+	&  (0.074) & (0.088) & (0.088) \\
+	$Ret\_ASSET_{t-2}$ & -0.003 & -0.1868 & -0.117\\
+	&(0.086)&(0.100)&(0.142)\\
+	N & 864 & 864 & 864 \\
+	$R^{2} Nakagawa$ & 0.039 & 0.036 & 0.010 \\
+	\bottomrule
+	\end{tabular}
+		\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(2) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+\begin{table}[t]			
+	\caption{\label{tab:extensiontab2}Part 2 of Extension of main results presented in \textcite{Kirchler2018}}								
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (4) & (5) & (6)  \\ 	
+	 \textit{\% Risky Asset} &  ALL & HIGH & LOW \\	  	  
+	\midrule	
+ 	\alpha  & 72.994*** & 69.736*** & 77.363*** \\
+	&  (4.474) & (5.250) & (5.727)  \\
+	$RET\_PF_{t-2}$ & -0.189*** & -0.110 & -0.251*** \\
+	&  (0.049) &(0.080) & (0.064) \\
+	$Ret\_ASSET_{t-2}$ & -0.161* & -0.166 & -0.223\\
+	& (0.063) & (0.088) & (0.093)\\
+	TRANK & 5.092 & 2.465 & 7.588 \\
+	& (6.335) & (7.281) & (7.943) \\
+	TTOUR & 34.675*** & 14.779* & 46.614*** \\
+	& (6.324) & (7.236) & (7.861)\\
+	N & 2592 & 1296 & 1296 \\
+	$R^{2} Nakagawa$  & 0.090 & 0.020 & 0.123 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(2) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+\clearpage
+
+\begin{table}[h]											
+	\caption{\label{tab:extensiontab3}Part 3 of Extension of main results presented in \textcite{Kirchler2018}}
+	\centering	
+	\begin{threeparttable}
+	\begin{tabular}[t]{>{\raggedright\arraybackslash}p{2cm}>{\centering\arraybackslash}p{3cm}
+				  >{\centering\arraybackslash}p{3cm}>{\centering\arraybackslash}p{3cm}} 
+	\toprule					  
+	Dep. Variable: & (7) & (8) & (9)  \\ 	
+	 \textit{\% Risky Asset} & TBASE & TRANK & TTOUR \\	  	  
+	\midrule	
+ 	\alpha & 71.782*** & 61.982*** & 89.1145***\\
+	& (6.748) & (7.037) & (7.621)  \\
+	$RET\_PF_{t-2}$ & -0.200* & -0.113 & -0.055 \\
+	&  (0.080) & (0.094) & (0.092) \\
+	$Ret\_ASSET_{t-2}$ & -0.134 & -0.243* & -0.190\\
+	&(0.087)&(0.101)&(0.143)\\
+	$RANK_{t-2}$ &0.343 & 4.541**&5.405**\\
+	&(1.471)&(1.461)&(1.806)\\
+	N & 864 & 864 & 864 \\
+	$R^{2} Nakagawa$ & 0.039 & 0.057 & 0.022 \\
+	\bottomrule
+	\end{tabular}
+	\begin{tablenotes}[para]
+	\item \textit{Note:}Random-effects panel regression with $subjectid$ specified as random unit. Model is computed with AR(2) disturbances. Standard errors are provided in parentheses. * p\textless0.05   ** p\textless0.01   *** p\textless0.001.
+	\end{tablenotes}
+	\end{threeparttable}
+\end{table}
+
+
+
+%Declaration of authorship
+\clearpage
+\section{Declaration of authorship}	
+I hereby declare that I have composed my thesis titled "Momentum Crashes" independently using only those resources mentioned, and that I have as such identified all passages which I have taken from publications verbatim or in substance. I am informed that my thesis might be controlled by anti-plagiarism software. Neither this thesis, nor any extract of it, has been previously submitted to an examining authority, in this or a similar form. I have ensured that the written version of this thesis is identical to the version saved on the enclosed storage medium. \bigbreak \noindent
+ Date: \today
+													
+
+\end{document}
+%%%%%%%%%%%%%%%%%%%% Document end %%%%%%%%%%%%%%%%%%%%
