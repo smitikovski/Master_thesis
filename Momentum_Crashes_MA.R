@@ -18,6 +18,8 @@ Stocks = fread(paste0(path_to_data,raw_Dax_Data))
 
 ### Data cleansing
 
+colnames(Stocks)
+
 Stocknames = colnames(Stocks)
 Stocknames_1 = list()
 #### extract the Stocknames from the colnames
@@ -25,7 +27,7 @@ Stocknames = Stocknames[1:length(Stocknames)]
 Stocknames = gsub(" - TOT RETURN IND","",Stocknames)
 Stocknames = gsub(" - EARNINGS PER SHR","",Stocknames)
 Stocknames = gsub(" (XET) ","",Stocknames)
-Stocknames = gsub("\\(.*?)","",Stocknames)
+##Stocknames = gsub("\\(.*?)","",Stocknames)
 Stocknames = str_trim(Stocknames, side = "both")
 Stocknames = unique(Stocknames)
 Stocknames
@@ -34,7 +36,12 @@ Stocknames
 Stocks = as.data.table(Stocks)
 setindex(Stocks, ...1)
 
-rel_dax_data = Stocks[, .(Stocknames)]
+
+
+rel_dax_data = Stocks[, ..Stocknames]
+
+
+Stocks[, c("Arcandor ")]
 
 ### 
 
