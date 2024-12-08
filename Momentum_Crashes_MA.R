@@ -5,21 +5,44 @@ library(data.table)
 library(ggplot2)
 library(stargazer)
 library(readxl)
+library(sandwich)
+library(stringr)
 
 ### Pathway to data
 path_to_data = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Data/"
-xls_tickers = "DAX_Ticker_ISIN.xlsx"
+raw_Dax_Data = "DAX_All.xlsx"
 
 ### Read in relevant ticker names
-Stocks = read_xlsx(paste0(path_to_data,xls_tickers))
+Stocks = fread(paste0(path_to_data,raw_Dax_Data))
 
-### Get Stock data from Yahoo Finance API and store it
 
+### Data cleansing
+
+Stocknames = colnames(Stocks)
+Stocknames_1 = list()
+#### extract the Stocknames from the colnames
+Stocknames = Stocknames[1:length(Stocknames)]
+Stocknames = gsub(" - TOT RETURN IND","",Stocknames)
+Stocknames = gsub(" - EARNINGS PER SHR","",Stocknames)
+Stocknames = gsub(" (XET) ","",Stocknames)
+Stocknames = gsub("\\(.*?)","",Stocknames)
+Stocknames = str_trim(Stocknames, side = "both")
+Stocknames = unique(Stocknames)
+Stocknames
+
+### Filter for relevant Data
+Stocks = as.data.table(Stocks)
+setindex(Stocks, ...1)
+
+rel_dax_data = Stocks[, .(Stocknames)]
+
+### 
 
 
 
 
 ### Read in the data used in Daniel & Moskowitz
-constituents = (,)
+
+
 
 
