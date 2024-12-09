@@ -7,6 +7,7 @@ library(stargazer)
 library(readxl)
 library(sandwich)
 library(stringr)
+library(lubridate)
 
 ### Pathway to data
 path_to_data = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Data/"
@@ -14,7 +15,6 @@ raw_Dax_Data = "DAX_All.xlsx"
 
 ### Read in relevant ticker names
 Stocks = fread(paste0(path_to_data,raw_Dax_Data))
-
 
 ### Data cleansing
 
@@ -35,15 +35,14 @@ Stocknames
 ### Filter for relevant Data
 Stocks = as.data.table(Stocks)
 setindex(Stocks, ...1)
-
-
-
 rel_dax_data = Stocks[, ..Stocknames]
+setnames(rel_dax_data, old = c("...1"), new = c("Date"))
+rel_dax_data[, Date := date(Date)]
 
 
-Stocks[, c("Arcandor ")]
 
 ### 
+
 
 
 
