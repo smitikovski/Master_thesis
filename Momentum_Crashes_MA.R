@@ -39,9 +39,20 @@ rel_dax_data = Stocks[, ..Stocknames]
 setnames(rel_dax_data, old = c("...1"), new = c("Date"))
 rel_dax_data[, Date := date(Date)]
 
+Data_copy = rel_dax_data
+
+## Cleanse for the XETRA-Data provided in the export file from EIKON
+colnames(Data_copy)
+Data_copy = Data_copy[, c(79:length(colnames(Data_copy)) ) := NULL]
+colnames(Data_copy)
+
+## Capping the Data to the dates at which Stocks entered and left the DAX
 
 
-### 
+
+
+### Momentum Portfolio
+## 
 
 
 
