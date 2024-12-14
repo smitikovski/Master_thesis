@@ -65,7 +65,7 @@ Cec[,Date :=  Data_copy[, "Date"] ]
 Stock_names = colnames(Data_copy)
 writexl::write_xlsx(as.data.frame(Stock_names), path = path_to_data)
 
-### Data Cleansing of FSE Stock Data
+### Data Cleansing of monthly FSE Stock Data
 
 colnames(FSE_Stocks)
 FSE_stocknames = colnames(FSE_Stocks)
@@ -75,8 +75,32 @@ FSE_stocknames = gsub(" - EARNINGS PER SHR", "", FSE_stocknames)
 
 FSE_stocknames = unique(FSE_stocknames)
 FSE_stocknames = FSE_stocknames[!grepl("#ERROR", FSE_stocknames)]
+FSE_stocknames = sub("\\.\\.\\.\\..*$", "", FSE_stocknames)
 FSE_stocknames = sub("\\.\\.\\..*$", "", FSE_stocknames)
 FSE_stocknames = unique(FSE_stocknames)
+FSE_stocknames
+
+
+columns_to_keep = !grepl("#ERROR", colnames(FSE_Stocks))
+FSE_Stocks = FSE_Stocks[, ..columns_to_keep]
+setnames(FSE_Stocks, gsub("\\.\\.\\..*", "", colnames(FSE_Stocks)))
+
+
+#Create new variable just for the Prices to calc returns etc.
+FSE_monthly_p = copy(FSE_Stocks)
+FSE_monthly_p = as.data.table(FSE_monthly_p)
+
+search_to_drop = c(" - EARNINGS PER SHR"," - TOT RETURN IND")
+pattern = paste(search_to_drop, collapse = "|")
+price_columns_to_keep = !grepl(pattern, colnames(FSE_monthly_p))
+
+FSE_monthly_p = FSE_monthly_p[, ..price_columns_to_keep]
+
+unique_cols = !duplicated(colnames(FSE_monthly_p))
+
+FSE_monthly_p = FSE_monthly_p[, ..unique_cols]
+
+price_columns_to_keep
 
 
 # Names of the stocks are now cleanly extracted
@@ -86,6 +110,10 @@ valid_stocknames <- FSE_stocknames[!FSE_stocknames %in% colnames(FSE_Stocks)]
 valid_stocknames
 
 rel_FSE_Stocks = FSE_Stocks[, ..FSE_stocknames]
+
+FSE_Stocks[, "BAYWA"]
+
+colnames(FSE_Stocks)
 
 
 ### Momentum Portfolio
