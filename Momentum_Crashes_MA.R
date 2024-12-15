@@ -47,12 +47,12 @@ columns_to_keep2 = !grepl("#ERROR", colnames(FSE_monthly_p))
 FSE_monthly_p = FSE_monthly_p[, ..columns_to_keep2]
 setkey(FSE_monthly_p, Date)
 
+# Calculate the Stock returns for the portfolio returns
+ # Melt DT to calc the monthly returns
 
-
-# Stocks with 
-
-
-
+FSE_monthly_p_l = melt(FSE_monthly_p, id.vars = c("Date"))
+FSE_monthly_p_l[, value := as.numeric(value)]
+FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
 
 ### Momentum Portfolio
 ## 
