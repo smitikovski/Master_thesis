@@ -11,17 +11,38 @@ library(lubridate)
 
 ### Pathway to data
 path_to_data = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Data/"
+
+### Read in the Data ´
+
 raw_Dax_Data = "DAX_All.xlsx"
 
 raw_FSE_monthly = "FSE_Monthly.xlsx"
 
-### Read in relevant ticker names
+EURIBOR_name = "EURIBOR.xlsx"
+
+FIBOR_name = "FIBOR.xlsx"
+
+
+### Read in relevant data
 Stocks = fread(paste0(path_to_data,raw_Dax_Data))
 
 FSE_Stocks = read_xlsx(paste0(path_to_data, raw_FSE_monthly))
 
-### Data Cleansing of monthly FSE Stock Data
 
+# Import EURIBOR data and format it
+EURIBOR = read_xlsx(paste0(path_to_data, EURIBOR_name))
+setnames(EURIBOR, c("DATE", "EURIBOR 1M", "EURIBOR 3M"))
+EURIBOR = as.data.table(EURIBOR)
+EURIBOR[, DATE := ymd(DATE)]
+
+#Import FIBOR data and format it
+FIBOR = read_xlsx(paste0(path_to_data, FIBOR_name))
+setnames(FIBOR, c("DATE", "FIBOR 1M"))
+FIBOR = as.data.table(FIBOR)
+FIBOR[, DATE := ymd(DATE)]
+
+
+### Data Cleansing of monthly FSE Stock Data
 columns_to_keep = !grepl("#ERROR", colnames(FSE_Stocks))
 FSE_Stocks = FSE_Stocks[, ..columns_to_keep]
 setnames(FSE_Stocks, gsub("\\.\\.\\..*", "", colnames(FSE_Stocks)))
