@@ -31,15 +31,22 @@ FSE_Stocks = read_xlsx(paste0(path_to_data, raw_FSE_monthly))
 
 # Import EURIBOR data and format it
 EURIBOR = read_xlsx(paste0(path_to_data, EURIBOR_name))
-setnames(EURIBOR, c("DATE", "EURIBOR 1M", "EURIBOR 3M"))
+setnames(EURIBOR, c("DATE", "RF_1M", "RF_3M"))
 EURIBOR = as.data.table(EURIBOR)
 EURIBOR[, DATE := ymd(DATE)]
+EURIBOR[, "RF_3M" := NULL]
 
 #Import FIBOR data and format it
 FIBOR = read_xlsx(paste0(path_to_data, FIBOR_name))
-setnames(FIBOR, c("DATE", "FIBOR 1M"))
+setnames(FIBOR, c("DATE", "RF_1M"))
 FIBOR = as.data.table(FIBOR)
 FIBOR[, DATE := ymd(DATE)]
+FIBOR = FIBOR[DATE <= "1999-01-01"]
+
+# Transform FIBOR AND EURIBOR data to one continuous time series
+RF_Interest = rbind.data.frame(FIBOR, EURIBOR)
+setorder(RF_Interest, DATE)
+
 
 
 ### Data Cleansing of monthly FSE Stock Data
