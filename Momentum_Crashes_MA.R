@@ -47,8 +47,6 @@ FIBOR = FIBOR[DATE <= "1999-01-01"]
 RF_Interest = rbind.data.frame(FIBOR, EURIBOR)
 setorder(RF_Interest, DATE)
 
-
-
 ### Data Cleansing of monthly FSE Stock Data
 columns_to_keep = !grepl("#ERROR", colnames(FSE_Stocks))
 FSE_Stocks = FSE_Stocks[, ..columns_to_keep]
@@ -82,8 +80,22 @@ FSE_monthly_p_l = melt(FSE_monthly_p, id.vars = c("Date"))
 FSE_monthly_p_l[, value := as.numeric(value)]
 FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
 
+# Calculate the cumulated return of month t-12 to t-2
+
+#FSE_monthly_p_l[, Return_2L := as.numeric(shift(Return, n = 2, type = "lead")), by = variable]
+FSE_monthly_p_l[, Return_cs := frollsum(Return, 11)] 
+
 ### Momentum Portfolio
-## 
+# Put Stocks into deciles
+
+# Create wide table again
+FSE_monthly_p_w = dcast(FSE_monthly_p_l, Date~variable, value.var = c("Return_cs"))
+
+
+
+
+
+
 
 #Data_copy[, Metro := Data_copy[Date <= "1996-07-12" & Date >= "", Metro ]
 
