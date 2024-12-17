@@ -86,11 +86,12 @@ FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(val
 FSE_monthly_p_l[, Return_cs := frollsum(Return, 11)] 
 
 ### Momentum Portfolio
-# Put Stocks into deciles
+# Rank stocks according to their return and put them into deciles
+
+
 
 # Create wide table again
 FSE_monthly_p_w = dcast(FSE_monthly_p_l, Date~variable, value.var = c("Return_cs"))
-
 
 
 
