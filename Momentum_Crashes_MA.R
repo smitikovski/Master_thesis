@@ -24,8 +24,6 @@ FIBOR_name = "FIBOR.xlsx"
 
 
 ### Read in relevant data
-Stocks = fread(paste0(path_to_data,raw_Dax_Data))
-
 FSE_Stocks = read_xlsx(paste0(path_to_data, raw_FSE_monthly))
 
 # Import EURIBOR data and format it
@@ -45,6 +43,11 @@ FIBOR = FIBOR[DATE <= "1999-01-01"]
 # Transform FIBOR AND EURIBOR data to one continuous time series
 RF_Interest = rbind.data.frame(FIBOR, EURIBOR)
 setorder(RF_Interest, DATE)
+
+# Transform FIBOR and EURIBOR Rates into percentage points
+RF_Interest[, RF_1M := as.numeric(RF_1M)]
+RF_Interest[, RF_1M := RF_1M/100]
+
 
 ### Data Cleansing of monthly FSE Stock Data
 columns_to_keep = !grepl("#ERROR", colnames(FSE_Stocks))
@@ -112,11 +115,6 @@ FSE_monthly_p_l[ Date == "2023-10-03" & Decile == 1, .N]
 FSE_monthly_p_l[ Date == "2023-10-03" & Decile ==10, .(Return_cs, Decile)]
 FSE_monthly_p_l[ Date == "2023-10-03" & Decile ==1, .(Return_cs, Decile)]
 
-2022-10-03
-FSE_monthly_p_l[ Date == "2022-10-03" & Decile == 10, .N]
-
-688/77
-
 # Seems to work
 ## Now calculate the return of the winners minus the return of the losers
 
@@ -129,20 +127,36 @@ LOSERS = FSE_monthly_p_l[PF_Formation == 1, .(LOSER = mean(Return_cs, na.rm = T)
 WML_Data = merge(WML_Data, LOSERS, by = "Date")
 WML_Data[, WML := WINNER - LOSER]
 
-WML_Data[LOSER == min(LOSER), ]
+## Add the RF_Interest to the data.table for comparison
 
-WML_Data[, max(WINNER)]
-#1: 1988-11-03         NA    NA
-#2: 2014-02-03   72.43583    NA
-#3: 2016-01-03   83.98931    NA
-#4: 2019-05-03 1814.81072    NA
-#5: 2023-10-03  395.05834    NA
+setnames(WML_Data, c("DATE", "WINNER", "LOSER", "WML"))
+WML_Data[, DATE := ceiling_date(DATE, "month")]
+RF_Interest[, DATE := ceiling_date(DATE, "month")]
 
-FSE_monthly_p_l[Date == "2014-02-03" & PF_Formation == 1] sum()
+WML_Data = merge(WML_Data, RF_Interest, by = c("DATE"), all.x = T)
+WML_Data[, RF_1M.y := NULL]
+setorder(WML_Data, Date)
 
+### Convert these returns into prices as if invested into portfolio for comparison of return development
+
+
+WML_Data_l = melt(WML_Data, id.vars = c("DATE"), na.rm = T)
+setnames(WML_Data_l, c("DATE", "PORTFOLIO", "RETURN"))
+
+
+## Plotting of results
+
+ggplot(WML_Data_l, aes(x = DATE, y = RETURN, group = PORTFOLIO, color = PORTFOLIO))
++ geom_line() +
+xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Market", "Winners", "Losers", "WML")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years")
+  
 
 ## Investigation of results
-## 2024-12-03
+## 
 
 
 
