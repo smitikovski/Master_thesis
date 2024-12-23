@@ -85,7 +85,7 @@ FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(val
 # Calculate the cumulated return of month t-12 to t-2
 
 #FSE_monthly_p_l[, Return_2L := as.numeric(shift(Return, n = 2, type = "lead")), by = variable]
-FSE_monthly_p_l[, Return_cs := frollsum(Return, 11)] 
+FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)] 
 
 ### Momentum Portfolio
 # Rank stocks according to their return and put them into deciles
@@ -139,41 +139,41 @@ setorder(WML_Data, Date)
 
 ### Convert these returns into prices as if invested into portfolio for comparison of return development
 
+WML_Data[!is.na(WINNER) , value_of_a_euro_winners := cumprod(1+WINNER/1)]
+WML_Data[!is.na(LOSER), value_of_a_euro_losers := cumprod(1+LOSER)]
+WML_Data[!is.na(WML)   , value_of_a_euro_wml := cumprod(1+WML)]
+WML_Data[ !is.na(RF_1M)   , value_of_a_euro_rf := cumprod(1+RF_1M)]
 
-WML_Data_l = melt(WML_Data, id.vars = c("DATE"), na.rm = T)
-setnames(WML_Data_l, c("DATE", "PORTFOLIO", "RETURN"))
+
+
+WML_Data_l = melt(WML_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
+setnames(WML_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
 
 
 ## Plotting of results
-
-ggplot(WML_Data_l, aes(x = DATE, y = RETURN, group = PORTFOLIO, color = PORTFOLIO))
-+ geom_line() +
-xlab("Date") + ylab("Portfolio Value") +
+ggplot(WML_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
   theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
-  scale_colour_discrete(labels = c("Market", "Winners", "Losers", "WML")) +
+  scale_colour_discrete(labels = c("Winners", "Losers", "WML", "Risk-Free")) +
   scale_y_continuous(trans="log10") +
   scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years")
   
 
 ## Investigation of results
-## 
-
+## Calculation of relevant metrics 
+# eg sharpe ratio of the porftolio compared to just winners portfolio or risk free
 
 
 
 
 
 # Create wide table again visual comparability
-FSE_monthly_p_w = dcast(FSE_monthly_p_l, Date~variable, value.var = c("Return_cs"))
 
 
 
 
 
-
-
-
-#Data_copy[, Metro := Data_copy[Date <= "1996-07-12" & Date >= "", Metro ]
 
 
 
