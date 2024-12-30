@@ -106,8 +106,7 @@ frankfurt_selected_holidays <- function(start_date, end_date) {
   easter <- timeDate::Easter(rel_years)
   good_friday <- as.Date(easter) - 2
   easter_monday <- as.Date(easter) + 1
-  
-  # Fixed-date holidays
+
   fixed_holidays <- c(
     "01-01", # New Year's Day
     "05-01", # Labour Day
@@ -116,29 +115,15 @@ frankfurt_selected_holidays <- function(start_date, end_date) {
     "12-26", # Boxing Day
     "12-31"  # New Year's Eve
   )
-  
-  # Create fixed holidays for all relevant years
   fixed_holidays <- as.Date(paste0(rel_years, "-", fixed_holidays), format = "%Y-%m-%d")
-  
-  # Combine holidays
   holidays <- unique(c(good_friday, easter_monday, fixed_holidays))
-  
-  # Ensure holidays are within the specified range
   holidays <- holidays[holidays >= start_date & holidays <= end_date]
-  
   return(holidays)
 }
-
-# Generate the list of holidays
 frankfurt_selected_holidays_list <- frankfurt_selected_holidays(start_date, end_date)
-
-# Print holidays for verification
-print(frankfurt_selected_holidays_list)
-
-# Filter out rows from FSE_Daily that match the holidays
 FSE_Daily <- FSE_Daily[!(DATE %in% frankfurt_selected_holidays_list)]
 
-# Replace values after delist date with NA
+# Replace values after delisting date with NA
 delist_pattern <- "DELIST\\.(\\d{2}/\\d{2}/\\d{2})$"
 delist_cols <- grep(delist_pattern, col_names, value = TRUE)
 
@@ -188,9 +173,9 @@ setkey(FSE_daily_p, DATE)
 ###Calculate the Stock returns for the portfolio returns
  # Melt DT to calc the monthly returns
 
-FSE_monthly_p_l = melt(FSE_monthly_p, id.vars = c("Date"))
-FSE_monthly_p_l[, value := as.numeric(value)]
-FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
+#FSE_monthly_p_l = melt(FSE_monthly_p, id.vars = c("Date"))
+#FSE_monthly_p_l[, value := as.numeric(value)]
+#FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
 
 
 # Calculate the daily stock returns
@@ -206,22 +191,21 @@ setorder(FSE_daily_p_l, Stock, DATE)
 FSE_daily_p_l[, DATE := ymd(DATE)]
 FSE_daily_p_l[, Stock := as.character(Stock)]
 
-FSE_daily_p_l[Stock == unique(Stock)]
-
+######## TO DO - Testen!!!! 
 uniqueN(FSE_daily_p_l$Stock)
 
 FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
-FSE_daily_p_l[, Daily_Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
+#FSE_daily_p_l[, Daily_Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
 FSE_daily_p_l[!is.na(Daily_Return)]
 
 # Get the monthly returns, market value at the end of the months and the 11 month returns from daily data
 FSE_ceiling = FSE_daily_p_l[DATE %in% ceiling_date(FSE_daily_p_l$DATE, "month")]
 FSE_ceiling[, Daily_Return := NULL]
-FSE_ceiling[, Return_11M := as.numeric(log((Price - shift(Price, n = 11)) / shift(Price, n = 11))), by = Stock]
+FSE_ceiling[, Return_11M := as.numeric((Price - shift(Price, n = 11)) / shift(Price, n = 11)), by = Stock]
 FSE_ceiling[, REL_RET := shift(Return_11M, n = 1, type = "lag"), by = Stock]
 FSE_ceiling[, REL_MV := shift(MV, n = 1, type = "lag"), by = Stock]
-FSE_ceiling[, Return_1M := as.numeric(log((Price - shift(Price, n = 1)) / shift(Price, n = 1))), by = Stock]
+FSE_ceiling[, Return_1M := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
  
 # Assign the stocks of each month to a decile according to their 11 month return
 FSE_ceiling[, Decile := fifelse(
@@ -251,8 +235,7 @@ FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)]
 
 
 ## Calculate the monthly returns based on the daily data
-FSE_daily_p_l = melt(FSE_daily_p, id.vars = c("DATE"),,  variable.name = "Stock", value.name = c("Price", "MarketValue") 
-))
+FSE_daily_p_l = melt(FSE_daily_p, id.vars = c("DATE"),,  variable.name = "Stock", value.name = c("Price", "MarketValue"))
 FSE_daily_p_l[, value := as.numeric(value)]
 FSE_daily_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
 FSE_daily_p_l[, Date := ymd(Date)]
