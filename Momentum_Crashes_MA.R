@@ -22,8 +22,6 @@ raw_FSE_daily = "FSE_ALL.xlsx"
 EURIBOR_name = "EURIBOR.xlsx"
 FIBOR_name = "FIBOR.xlsx"
 
-
-
 ### Read in relevant data (monthly and daily)
 FSE_Stocks = read_xlsx(paste0(path_to_data, raw_FSE_monthly))
 FSE_Daily = read_xlsx(paste0(path_to_data, raw_FSE_daily))
@@ -146,14 +144,27 @@ stocks_to_keep <- names(valid_stocks[valid_stocks >= 270])
 FSE_Daily <- FSE_Daily[, c("DATE", stocks_to_keep), with = FALSE]
 colnames(FSE_Daily)
 
-
-### Excluding all stocks that have a starting value < 1
+### Excluding all stocks that have a starting value < 1 ### to be reviewed
 stock_columns = setdiff(names(FSE_Daily), "DATE")
 
 first_values <- FSE_Daily[, lapply(.SD, function(x) x[which(!is.na(x))[1]]), .SDcols = stock_columns]
 first_values_vector <- unlist(first_values, use.names = TRUE)
 valid_stocks <- names(first_values_vector[first_values_vector >= 1])
 FSE_Daily = FSE_Daily[, c("DATE", valid_stocks), with = FALSE]
+
+
+# Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
+FSE_daily_p_l[, Price := {
+  unchanged_count <- rleid(Price)
+  repeated_lengths <- rle(Price)$lengths
+  repeated <- repeated_lengths[unchanged_count] >= 3
+  if (any(repeated)) {
+    first_inactive <- which(repeated)[1]  # Find the start of the first inactive period
+    Price[seq(first_inactive + 1, .N)] <- NA  # Replace all subsequent prices
+  }
+  Price
+}, by = Stock]
+
 
 ## Make a data copy so data transformations will not have an impact on the initial file
 FSE_daily_p = copy(FSE_Daily)
@@ -196,17 +207,42 @@ uniqueN(FSE_daily_p_l$Stock)
 
 FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
+
 #FSE_daily_p_l[, Daily_Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
 FSE_daily_p_l[!is.na(Daily_Return)]
 
 # Get the monthly returns, market value at the end of the months and the 11 month returns from daily data
-FSE_ceiling = FSE_daily_p_l[DATE %in% ceiling_date(FSE_daily_p_l$DATE, "month")]
-FSE_ceiling[, Daily_Return := NULL]
+
+### new new new first record per month extraction since ceiling date does not work
+FSE_Daily[, DATE := as.Date(DATE)]
+
+# Sort the dataset by DATE to ensure proper order
+setorder(FSE_Daily, DATE)
+
+# Function to get the first available date in each month
+get_first_in_month=function(dates) {
+  # Extract the year-month for grouping
+  dates_dt=data.table(DATE = dates, YearMonth = floor_date(dates, "month"))
+  
+  # Find the first date in each month
+  result=dates_dt[, .(First_DATE = min(DATE)), by = YearMonth]
+  
+  return(result)
+}
+first_dates = get_first_in_month(FSE_daily_p_l$DATE)
+first_dates[, First_DATE := as.Date(First_DATE)]
+FSE_ceiling = FSE_daily_p_l[first_dates, on = .(DATE = First_DATE)]
+FSE_ceiling[, YearMonth := NULL]
+
+#FSE_ceiling[, Daily_Return := NULL]
 FSE_ceiling[, Return_11M := as.numeric((Price - shift(Price, n = 11)) / shift(Price, n = 11)), by = Stock]
 FSE_ceiling[, REL_RET := shift(Return_11M, n = 1, type = "lag"), by = Stock]
 FSE_ceiling[, REL_MV := shift(MV, n = 1, type = "lag"), by = Stock]
 FSE_ceiling[, Return_1M := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
  
+
+FSE_daily_p_l[DATE > "2024-03-01" & DATE < "2024-05-01", DATE]
+unique(ceiling_date(FSE_daily_p_l$DATE, "month"))
 # Assign the stocks of each month to a decile according to their 11 month return
 FSE_ceiling[, Decile := fifelse(
   !is.na(REL_RET),  
@@ -217,7 +253,18 @@ FSE_ceiling[, Decile := fifelse(
 
 # Weighting the stocks within their deciles according to their market cap - as it is a value weighted portfolio
 FSE_ceiling[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
-FSE_ceiling[, WRET := REL_RET*WEIGHT]
+FSE_ceiling[, WRET := Return_1M*WEIGHT]
+
+FSE_ceiling[ DATE == "2024-01-01" & Decile  == 10]
+FSE_ceiling[ DATE == "2024-02-01" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-04-02" & Decile  == 9, sum(WRET, na.rm = T)]
+FSE_ceiling[ DATE == "2024-05-01" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-01-01" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-04-04" & Decile  == 2]
+
+
+
 
 # Creation of Returns per decile
 MOM_Data = FSE_ceiling[Decile==10, sum(WRET), by = DATE ]
