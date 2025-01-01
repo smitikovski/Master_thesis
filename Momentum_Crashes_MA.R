@@ -31,14 +31,14 @@ FSE_Daily = read_xlsx(paste0(path_to_data, raw_FSE_daily))
 EURIBOR = read_xlsx(paste0(path_to_data, EURIBOR_name))
 setnames(EURIBOR, c("DATE", "RF_1M", "RF_3M"))
 EURIBOR = as.data.table(EURIBOR)
-EURIBOR[, DATE := ymd(DATE)]
+EURIBOR[, DATE := format(DATE, "%Y-%m")]
 EURIBOR[, "RF_3M" := NULL]
 
 #Import FIBOR data and format it
 FIBOR = read_xlsx(paste0(path_to_data, FIBOR_name))
 setnames(FIBOR, c("DATE", "RF_1M"))
 FIBOR = as.data.table(FIBOR)
-FIBOR[, DATE := ymd(DATE)]
+FIBOR[, DATE := format(DATE, "%Y-%m")]
 FIBOR = FIBOR[DATE <= "1999-01-01"]
 
 # Transform FIBOR AND EURIBOR data to one continuous time series
@@ -152,21 +152,7 @@ first_values_vector <- unlist(first_values, use.names = TRUE)
 valid_stocks <- names(first_values_vector[first_values_vector >= 1])
 FSE_Daily = FSE_Daily[, c("DATE", valid_stocks), with = FALSE]
 
-
-# Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
-FSE_daily_p_l[, Price := {
-  unchanged_count <- rleid(Price)
-  repeated_lengths <- rle(Price)$lengths
-  repeated <- repeated_lengths[unchanged_count] >= 3
-  if (any(repeated)) {
-    first_inactive <- which(repeated)[1]  # Find the start of the first inactive period
-    Price[seq(first_inactive + 1, .N)] <- NA  # Replace all subsequent prices
-  }
-  Price
-}, by = Stock]
-
-
-## Make a data copy so data transformations will not have an impact on the initial file
+## Make a data copy so data transformations will not have an impact on the initial file ### to be removed - check
 FSE_daily_p = copy(FSE_Daily)
 FSE_daily_p = as.data.table(FSE_daily_p)
 
@@ -209,7 +195,7 @@ FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
 
 #FSE_daily_p_l[, Daily_Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
-FSE_daily_p_l[!is.na(Daily_Return)]
+#FSE_daily_p_l[!is.na(Daily_Return)]
 
 # Get the monthly returns, market value at the end of the months and the 11 month returns from daily data
 
@@ -233,6 +219,7 @@ first_dates = get_first_in_month(FSE_daily_p_l$DATE)
 first_dates[, First_DATE := as.Date(First_DATE)]
 FSE_ceiling = FSE_daily_p_l[first_dates, on = .(DATE = First_DATE)]
 FSE_ceiling[, YearMonth := NULL]
+FSE_ceiling[, DATE := format(DATE, "%Y-%m")]
 
 #FSE_ceiling[, Daily_Return := NULL]
 FSE_ceiling[, Return_11M := as.numeric((Price - shift(Price, n = 11)) / shift(Price, n = 11)), by = Stock]
@@ -242,7 +229,7 @@ FSE_ceiling[, Return_1M := as.numeric((Price - shift(Price, n = 1)) / shift(Pric
  
 
 FSE_daily_p_l[DATE > "2024-03-01" & DATE < "2024-05-01", DATE]
-unique(ceiling_date(FSE_daily_p_l$DATE, "month"))
+
 # Assign the stocks of each month to a decile according to their 11 month return
 FSE_ceiling[, Decile := fifelse(
   !is.na(REL_RET),  
@@ -251,12 +238,30 @@ FSE_ceiling[, Decile := fifelse(
                  include.lowest = TRUE, labels = FALSE)),
   NA_integer_), by = DATE]
 
+
+# Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
+FSE_ceiling[, Price := {
+  unchanged_count <- rleid(Price)
+  repeated_lengths <- rle(Price)$lengths
+  repeated <- repeated_lengths[unchanged_count] >= 3
+  if (any(repeated)) {
+    first_inactive <- which(repeated)[1]  # Find the start of the first inactive period
+    Price[seq(first_inactive + 1, .N)] <- NA  # Replace all subsequent prices
+  }
+  Price
+}, by = Stock]
+
+FSE_daily_p_l[, .(Unique_Stocks = uniqueN(Stock)), by = DATE][Unique_Stocks < 11, DATE]
+FSE_ceiling[!is.na(Price), .(Stocks_Non_NA = uniqueN(Stock)), by = DATE][Stocks_Non_NA < 11, DATE]
+FSE_ceiling[DATE == "2020-05" & !is.na(Price)]
+
 # Weighting the stocks within their deciles according to their market cap - as it is a value weighted portfolio
 FSE_ceiling[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
 FSE_ceiling[, WRET := Return_1M*WEIGHT]
 
-FSE_ceiling[ DATE == "2024-01-01" & Decile  == 10]
-FSE_ceiling[ DATE == "2024-02-01" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-01" & Decile  == 10]
+FSE_ceiling[ DATE == "2024-02" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WEIGHT)]
 FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WRET)]
 FSE_ceiling[ DATE == "2024-04-02" & Decile  == 9, sum(WRET, na.rm = T)]
 FSE_ceiling[ DATE == "2024-05-01" & Decile  == 10, sum(WRET)]
@@ -267,15 +272,45 @@ FSE_ceiling[ DATE == "2024-04-04" & Decile  == 2]
 
 
 # Creation of Returns per decile
-MOM_Data = FSE_ceiling[Decile==10, sum(WRET), by = DATE ]
-MOM_Data2 = FSE_ceiling[Decile==1, sum(WRET), by = DATE ]
-MOM_Data3 = FSE_ceiling[, MKT := sum(WRET), by = DATE]
+MOM_Data = FSE_ceiling[Decile==10 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data1= FSE_ceiling[Decile==9 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data2= FSE_ceiling[Decile==8 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data3= FSE_ceiling[Decile==7 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data4= FSE_ceiling[Decile==6 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data5= FSE_ceiling[Decile==5 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data6= FSE_ceiling[Decile==4 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data7= FSE_ceiling[Decile==3 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data8= FSE_ceiling[Decile==2 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data9= FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
+
 setnames(MOM_Data, c("DATE", "WINNER"))
+setnames(MOM_Data1, c("DATE", "NINE"))
+setnames(MOM_Data2, c("DATE", "EIGHT"))
+setnames(MOM_Data3, c("DATE", "SEVEN"))
+setnames(MOM_Data4, c("DATE", "SIX"))
+setnames(MOM_Data5, c("DATE", "FIVE"))
+setnames(MOM_Data6, c("DATE", "FOUR"))
+setnames(MOM_Data7, c("DATE", "THREE"))
+setnames(MOM_Data8, c("DATE", "TWO"))
+setnames(MOM_Data9, c("DATE", "LOSER"))
+
 setorder(MOM_Data, DATE)
 setnames(MOM_Data2, c("DATE", "LOSER"))
-MOM_Data = merge(MOM_Data, MOM_Data2, by = c("DATE"))
 
-# Calculate the cumulated return of month t-12 to t-2
+MOM_Data = merge(MOM_Data, MOM_Data1, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data2, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data3, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data4, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data5, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data6, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data7, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data8, by = c("DATE"))
+MOM_Data = merge(MOM_Data, MOM_Data9, by = c("DATE"))
+
+
+
+
+# Calculate the cumulated return of month t-12 to t-2  ###### can be removed!!! 
 
 #FSE_monthly_p_l[, Return_2L := as.numeric(shift(Return, n = 2, type = "lead")), by = variable]
 FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)] 
