@@ -31,6 +31,7 @@ FSE_Daily = read_xlsx(paste0(path_to_data, raw_FSE_daily))
 EURIBOR = read_xlsx(paste0(path_to_data, EURIBOR_name))
 setnames(EURIBOR, c("DATE", "RF_1M", "RF_3M"))
 EURIBOR = as.data.table(EURIBOR)
+EURIBOR[, DATE := as.Date(DATE)]
 EURIBOR[, DATE := format(DATE, "%Y-%m")]
 EURIBOR[, "RF_3M" := NULL]
 
@@ -38,6 +39,7 @@ EURIBOR[, "RF_3M" := NULL]
 FIBOR = read_xlsx(paste0(path_to_data, FIBOR_name))
 setnames(FIBOR, c("DATE", "RF_1M"))
 FIBOR = as.data.table(FIBOR)
+FIBOR[, DATE := as.Date(DATE)]
 FIBOR[, DATE := format(DATE, "%Y-%m")]
 FIBOR = FIBOR[DATE <= "1999-01-01"]
 
@@ -47,7 +49,10 @@ setorder(RF_Interest, DATE)
 
 # Transform FIBOR and EURIBOR Rates into percentage points
 RF_Interest[, RF_1M := as.numeric(RF_1M)]
-RF_Interest[, RF_1M := RF_1M/100]
+RF_Interest[, RF_1M_M := (1 + RF_1M / 100) ^ (1/12) - 1]
+RF_Interest[, RF_1M_D := (1 + RF_1M_M / 100) ^ (1/30) - 1]
+#RF_Interest[, DATE := format(DATE, "%Y-%m")]
+
 
 
 ###### Data Cleansing ############################################
@@ -190,7 +195,6 @@ FSE_daily_p_l[, Stock := as.character(Stock)]
 
 ######## TO DO - Testen!!!! 
 uniqueN(FSE_daily_p_l$Stock)
-
 FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
 
@@ -206,18 +210,22 @@ FSE_Daily[, DATE := as.Date(DATE)]
 setorder(FSE_Daily, DATE)
 
 # Function to get the first available date in each month
-get_first_in_month=function(dates) {
+get_last_in_month <- function(dates) {
   # Extract the year-month for grouping
-  dates_dt=data.table(DATE = dates, YearMonth = floor_date(dates, "month"))
+  dates_dt <- data.table(DATE = dates, YearMonth = floor_date(dates, "month"))
   
-  # Find the first date in each month
-  result=dates_dt[, .(First_DATE = min(DATE)), by = YearMonth]
+  # Find the last date in each month
+  result <- dates_dt[, .(Last_DATE = max(DATE)), by = YearMonth]
   
   return(result)
 }
-first_dates = get_first_in_month(FSE_daily_p_l$DATE)
-first_dates[, First_DATE := as.Date(First_DATE)]
-FSE_ceiling = FSE_daily_p_l[first_dates, on = .(DATE = First_DATE)]
+
+# Example usage
+last_dates <- get_last_in_month(FSE_daily_p_l$DATE)
+last_dates[, Last_DATE := as.Date(Last_DATE)] # Ensure dates are properly formatted
+
+# Merge with your main data table
+FSE_ceiling = FSE_daily_p_l[last_dates, on = .(DATE = Last_DATE)]
 FSE_ceiling[, YearMonth := NULL]
 FSE_ceiling[, DATE := format(DATE, "%Y-%m")]
 
@@ -234,10 +242,32 @@ FSE_daily_p_l[DATE > "2024-03-01" & DATE < "2024-05-01", DATE]
 FSE_ceiling[, Decile := fifelse(
   !is.na(REL_RET),  
   as.integer(cut(REL_RET,
-                 breaks = quantile(REL_RET, probs = seq(0, 1, 0.1), na.rm = TRUE),
+                breaks = quantile(REL_RET, probs = seq(0, 1, 0.1), na.rm = TRUE),
                  include.lowest = TRUE, labels = FALSE)),
   NA_integer_), by = DATE]
 
+#FSE_ceiling[, Decile := fifelse(
+#  !is.na(REL_RET),  
+#  as.integer(cut(REL_RET,
+#                 breaks = quantile(REL_RET, probs = c(0, 0.3, 0.7, 1), na.rm = TRUE),
+#                 include.lowest = TRUE)),
+#  NA_integer_), by = DATE]
+
+#FSE_ceiling[, Decile := fifelse(
+#  !is.na(REL_RET),  
+#  as.integer(cut(REL_RET,
+#                 breaks = quantile(REL_RET, probs = seq(0, 1, by = 0.2), na.rm = TRUE),
+#                 include.lowest = TRUE, labels = FALSE)),
+#  NA_integer_), by = DATE]
+
+
+
+setorder(FSE_ceiling, Stock, DATE)
+
+FSE_ceiling[ DATE == "2010-06" & Decile == 10,  mean(Return_1M)]
+FSE_ceiling[ DATE == "2010-06" & Decile == 1, mean(Return_1M)]
+
+MOM_Data[DATE == "2010-06", WML]
 
 # Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
 FSE_ceiling[, Price := {
@@ -261,6 +291,10 @@ FSE_ceiling[, WRET := Return_1M*WEIGHT]
 
 FSE_ceiling[ DATE == "2024-01" & Decile  == 10]
 FSE_ceiling[ DATE == "2024-02" & Decile  == 10, sum(WRET)]
+FSE_ceiling[ DATE == "2024-03" & Decile  == 1, sum(WRET)]
+
+MOM_Data[DATE == "2010-07", WML]
+
 FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WEIGHT)]
 FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WRET)]
 FSE_ceiling[ DATE == "2024-04-02" & Decile  == 9, sum(WRET, na.rm = T)]
@@ -268,6 +302,9 @@ FSE_ceiling[ DATE == "2024-05-01" & Decile  == 10, sum(WRET)]
 FSE_ceiling[ DATE == "2024-01-01" & Decile  == 10, sum(WRET)]
 FSE_ceiling[ DATE == "2024-04-04" & Decile  == 2]
 
+FSE_ceiling[ Decile  == 10, mean(WRET)]
+
+FSE_ceiling[ DATE == "2024-01" & Decile  == 1, sum(WEIGHT)]
 
 
 
@@ -282,6 +319,16 @@ MOM_Data6= FSE_ceiling[Decile==4 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data7= FSE_ceiling[Decile==3 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data8= FSE_ceiling[Decile==2 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data9= FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
+
+
+MOM_Data = FSE_ceiling[Decile==5 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data1 = FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data2 = FSE_ceiling[Decile==3 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data2 = FSE_ceiling[Decile==2 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data2 = FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
+
+
+
 
 setnames(MOM_Data, c("DATE", "WINNER"))
 setnames(MOM_Data1, c("DATE", "NINE"))
@@ -306,6 +353,51 @@ MOM_Data = merge(MOM_Data, MOM_Data6, by = c("DATE"))
 MOM_Data = merge(MOM_Data, MOM_Data7, by = c("DATE"))
 MOM_Data = merge(MOM_Data, MOM_Data8, by = c("DATE"))
 MOM_Data = merge(MOM_Data, MOM_Data9, by = c("DATE"))
+MOM_Data[, WML := WINNER-LOSER]
+
+## Add the Risk-free data (FIBOR & EURIBOR one-month interest rates)
+MOM_Data = merge(MOM_Data, RF_Interest, by = c("DATE"), all.x = T )
+
+MOM_Data[, RF_1M:= NULL]
+
+MOM_Data[!is.na(WINNER) , value_of_a_euro_winners := cumprod(1+WINNER)]
+MOM_Data[!is.na(LOSER), value_of_a_euro_losers := cumprod(1+LOSER)]
+MOM_Data[!is.na(WML)   , value_of_a_euro_wml := cumprod(1+WML)]
+MOM_Data[ !is.na(RF_1M)   , value_of_a_euro_rf := cumprod(1+RF_1M)]
+
+
+
+
+
+
+
+MOM_Data[, RF_1M:= NULL]
+
+MOM_Data[DATE == "2001-07", WML]
+MOM_Data[DATE == "2001-08", WML]
+MOM_Data[DATE == "2001-09", WML]
+MOM_Data[DATE == "2001-10", WML]
+MOM_Data[DATE == "2001-11", WML]
+MOM_Data[DATE == "2001-12", WML]
+MOM_Data[DATE == "2002-01", WML]
+
+
+WML_Data_l = melt(WML_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
+setnames(WML_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -363,6 +455,12 @@ LOSERS = FSE_monthly_p_l[PF_Formation == 1, .(LOSER = mean(Return_cs, na.rm = T)
 WML_Data = merge(WML_Data, LOSERS, by = "Date")
 WML_Data[, WML := WINNER - LOSER]
 
+### Create WML DATA from the current data-set based on daily data
+
+
+
+
+
 ## Add the RF_Interest to the data.table for comparison
 
 setnames(WML_Data, c("DATE", "WINNER", "LOSER", "WML"))
@@ -399,6 +497,65 @@ ggplot(WML_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO
 ## Investigation of results
 ## Calculation of relevant metrics 
 # eg sharpe ratio of the porftolio compared to just winners portfolio or risk free
+## Adjust risk free rate to daily rate
+
+RF_Interest[, DATE := ym(DATE)]
+
+
+daily_dates <- data.table(DATE = seq(min(as.Date(FSE_daily_p_l$DATE)), 
+                                     max(as.Date(FSE_daily_p_l$DATE)) + months(1) - 1, 
+                                     by = "day"))
+
+daily_dates[, DATE := as.Date(DATE)]
+RF_Interest[, DATE := as.Date(DATE)]
+RF_Interest[, DATE := ymd(DATE)]
+RF_Interest[, YearMonth := format(DATE, "%Y-%m")]
+daily_dates[, YearMonth := format(DATE, "%Y-%m")]
+
+daily_rf = merge(daily_dates, RF_Interest[, .(YearMonth, RF_1M_D)], by = "YearMonth", all.x = TRUE, allow.cartesian = TRUE)
+daily_rf[, YearMonth := NULL]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Sharpe Ratio
+risk_free_daily <- MOM_Data / 252  # Annual risk-free rate converted to daily
+
+# Step 1: Calculate excess returns
+FSE_daily_p_l[, Excess_Return := Return - risk_free_daily]
+
+# Step 2: Compute mean and standard deviation of excess returns
+mean_excess_return <- FSE_daily_p_l[, mean(Excess_Return, na.rm = TRUE)]
+sd_excess_return <- FSE_daily_p_l[, sd(Excess_Return, na.rm = TRUE)]
+
+# Step 3: Annualize returns and volatility
+annualized_mean_excess_return <- mean_excess_return * 252
+annualized_sd_excess_return <- sd_excess_return * sqrt(252)
+
+# Step 4: Calculate Sharpe Ratio
+sharpe_ratio <- annualized_mean_excess_return / annualized_sd_excess_return
+
+
+
+
 
 
 
