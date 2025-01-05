@@ -9,13 +9,14 @@ library(sandwich)
 library(stringr)
 library(lubridate)
 library(timeDate)
+library(tseries)
 
 ### Pathway to data
 path_to_data = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Data/"
 
 ### Read in the Data ´
 
-raw_Dax_Data = "DAX_All.xlsx"
+CDAX_IND = "CDAX_IND.xlsx"
 raw_FSE_monthly = "FSE_Monthly.xlsx"
 raw_FSE_daily = "FSE_ALL.xlsx"
 
@@ -26,6 +27,13 @@ FIBOR_name = "FIBOR.xlsx"
 FSE_Stocks = read_xlsx(paste0(path_to_data, raw_FSE_monthly))
 FSE_Daily = read_xlsx(paste0(path_to_data, raw_FSE_daily))
 
+
+### Import CDAX data and format it
+CDAX_IND = read_xlsx(paste0(path_to_data, CDAX_IND))
+CDAX_IND = as.data.table(CDAX_IND)
+CDAX_IND[, DATE := as.Date(DATE)]
+CDAX_IND[, DATE := ymd(DATE)]
+setnames(CDAX_IND, c("DATE","M_IND"))
 
 # Import EURIBOR data and format it
 EURIBOR = read_xlsx(paste0(path_to_data, EURIBOR_name))
@@ -411,7 +419,7 @@ FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)]
 ## Calculate the monthly returns based on the daily data
 FSE_daily_p_l = melt(FSE_daily_p, id.vars = c("DATE"),,  variable.name = "Stock", value.name = c("Price", "MarketValue"))
 FSE_daily_p_l[, value := as.numeric(value)]
-FSE_daily_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
+FSE_daily_p_l[, Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
 FSE_daily_p_l[, Date := ymd(Date)]
 
 
@@ -514,47 +522,44 @@ daily_dates[, YearMonth := format(DATE, "%Y-%m")]
 
 daily_rf = merge(daily_dates, RF_Interest[, .(YearMonth, RF_1M_D)], by = "YearMonth", all.x = TRUE, allow.cartesian = TRUE)
 daily_rf[, YearMonth := NULL]
+daily_rf[, Stock := "Risk-free"]
+setnames(daily_rf, "RF_1M_D", "Return")
+daily_rf[, DATE := as.Date(DATE)]
+
+FSE_combined = rbind(FSE_daily_p_l, daily_rf[, .(DATE, Stock, Return)], use.names = TRUE, fill = TRUE)
+setorder(FSE_combined, Stock, DATE)
+FSE_combined = FSE_combined[DATE < "2024-12-31"]
 
 
 
+## Sharpe Ratio based on MOM Data
+#Create the values for the excess return over the risk-free rate
+MOM_Data[, EX_RET_WML :=  WML-RF_1M]
+MOM_Data[, EX_RET_W := WINNER-RF_1M]
+MOM_Data[, EX_RET_L := LOSER-RF_1M]
+MOM_Data[, sd(EX_RET_WML, na.rm=T)]
+
+## Calculate the Sharpe Ratios for the Portfolios (from July 1990 as this is the start of the FIBOR time series)
+Sharpe_Ratio_WML_ALL = MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(EX_RET_WML, na.rm = T)/sd(EX_RET_WML, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_W_ALL = MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(EX_RET_W, na.rm = T)/sd(EX_RET_W, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_L_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(EX_RET_L, na.rm = T)/sd(EX_RET_L, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_NINE_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(NINE-RF_1M, na.rm = T)/sd(NINE-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_EIGHT_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(EIGHT-RF_1M, na.rm = T)/sd(EIGHT-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_SEVEN_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(SEVEN-RF_1M, na.rm = T)/sd(SEVEN-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_SIX_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(SIX-RF_1M, na.rm = T)/sd(SIX-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_FIVE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FIVE-RF_1M, na.rm = T)/sd(FIVE-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_FOUR_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FOUR-RF_1M, na.rm = T)/sd(FOUR-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_THREE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(THREE-RF_1M, na.rm = T)/sd(THREE-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_TWO_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(TWO-RF_1M, na.rm = T)/sd(TWO-RF_1M, na.rm = T))*sqrt(12)]
 
 
+MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(EX_RET_WML, na.rm = T))]
+MOM_Data[DATE > "1990-06"& !is.na(RF_1M), sd(EX_RET_WML, na.rm = T)]
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Sharpe Ratio
-risk_free_daily <- MOM_Data / 252  # Annual risk-free rate converted to daily
-
-# Step 1: Calculate excess returns
-FSE_daily_p_l[, Excess_Return := Return - risk_free_daily]
-
-# Step 2: Compute mean and standard deviation of excess returns
-mean_excess_return <- FSE_daily_p_l[, mean(Excess_Return, na.rm = TRUE)]
-sd_excess_return <- FSE_daily_p_l[, sd(Excess_Return, na.rm = TRUE)]
-
-# Step 3: Annualize returns and volatility
-annualized_mean_excess_return <- mean_excess_return * 252
-annualized_sd_excess_return <- sd_excess_return * sqrt(252)
-
-# Step 4: Calculate Sharpe Ratio
-sharpe_ratio <- annualized_mean_excess_return / annualized_sd_excess_return
-
-
-
+### Calculation of Portfolio Beta's
+#Load CDAX
+# Calc Return of Market
+# Regress excess return of portfolio against excess return of the market
 
 
 
