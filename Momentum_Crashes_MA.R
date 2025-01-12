@@ -12,9 +12,10 @@ library(timeDate)
 library(tseries)
 library(sjPlot)
 library(PerformanceAnalytics)
+library(zoo)
 ### PathsjPlot### Pathway to data
 path_to_data = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Data/"
-
+path_to_output = "/Users/mirkosmit/Documents/CAU/Master_Thesis/Output/"
 ### Read in the Data ´
 
 CDAX_IND = "CDAX_IND.xlsx"
@@ -44,6 +45,9 @@ EURIBOR[, DATE := as.Date(DATE)]
 EURIBOR[, DATE := format(DATE, "%Y-%m")]
 EURIBOR[, "RF_3M" := NULL]
 
+
+
+
 #Import FIBOR data and format it
 FIBOR = read_xlsx(paste0(path_to_data, FIBOR_name))
 setnames(FIBOR, c("DATE", "RF_1M"))
@@ -59,7 +63,7 @@ setorder(RF_Interest, DATE)
 # Transform FIBOR and EURIBOR Rates into percentage points
 RF_Interest[, RF_1M := as.numeric(RF_1M)]
 RF_Interest[, RF_1M_M := (1 + RF_1M / 100) ^ (1/12) - 1]
-RF_Interest[, RF_1M_D := (1 + RF_1M_M / 100) ^ (1/30) - 1]
+RF_Interest[, RF_1M_D := (1 + RF_1M / 100) ^ (1/252) - 1]
 #RF_Interest[, DATE := format(DATE, "%Y-%m")]
 
 
@@ -268,7 +272,7 @@ FSE_ceiling[, Decile := fifelse(
 #  NA_integer_), by = DATE]
 
 
-#### Quintiles
+#### Quintiles  #### can be removed
 FSE_ceiling[, Quintile := fifelse(
   !is.na(REL_RET),  
   as.integer(cut(REL_RET,
@@ -490,7 +494,7 @@ setorder(WML_Data, Date)
 
 ### Convert these returns into prices as if invested into portfolio for comparison of return development
 
-WML_Data[!is.na(WINNER) , value_of_a_euro_winners := cumprod(1+WINNER/1)]
+WML_Data[!is.na(WINNER) , value_of_a_euro_winners := cumprod(1+WINNER)]
 WML_Data[!is.na(LOSER), value_of_a_euro_losers := cumprod(1+LOSER)]
 WML_Data[!is.na(WML)   , value_of_a_euro_wml := cumprod(1+WML)]
 WML_Data[ !is.na(RF_1M)   , value_of_a_euro_rf := cumprod(1+RF_1M)]
@@ -626,11 +630,44 @@ FSE_ceiling[, YearMonth := format(ym(DATE), "%Y-%m")]
 MOM_daily = merge(FSE_daily_p_l, FSE_ceiling[, .(Stock, YearMonth, Decile)], by = c("Stock", "YearMonth"), all.x = TRUE)
 
 # Remove the YearMonth column if not needed
-daily_data[, YearMonth := NULL]
+MOM_daily[, YearMonth := NULL]
 
+MOM_daily_wml = MOM_daily[ DATE >= "1990-07-01",   ]
+
+MOM_daily[, REL_MV := shift(MV, n = 1, type = "shift")]
+
+MOM_daily[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
+MOM_daily[, WRET := Return*WEIGHT]
+MOM_daily[ DATE == "2020-10-1" & Decile == 10, sum(WEIGHT)]
+
+Merger = MOM_daily[ DATE >= "1990-07-01", sum(WRET), by = .(DATE, Decile)]
+setorder(Merger, DATE, Decile)
+setnames(Merger, c("DATE", "DECILE", "RETURN"))
+Merger = Merger[ !is.na(DECILE)]
+setnames(daily_rf, c("DATE", "RETURN", "DECILE"))
+setcolorder(daily_rf, names(Merger))
+daily_rf = daily_rf[!is.na(RETURN)]
+Merger = rbind(Merger, daily_rf[DATE >= "1990-07-01" & DATE %in% Merger[, unique(DATE)]], fill = T)
+setorder(Merger, DATE, DECILE)
+
+CDAX_IND[, RETURN := as.numeric(log(1+((M_IND - shift(M_IND, n = 1)) / shift(M_IND, n = 1))))]
+CDAX_IND[, DECILE := "MARKET"]
+CDAX_Merge = CDAX_IND[, .(DATE, DECILE, RETURN)]
+setcolorder(CDAX_Merge, names(Merger))
+Merger = rbind(Merger, CDAX_Merge[DATE >= "1990-07-01" & DATE %in% Merger[, unique(DATE)]], fill = T )
+setorder(Merger, DATE, DECILE)
+Mergerwml = Merger[,.( DATE = unique(DATE),RETURN = (as.numeric(Merger[DECILE == 10, RETURN]) - as.numeric(Merger[DECILE == 1, RETURN]))) ]
+Mergerwml[, DECILE := "WML"] ; setcolorder(Mergerwml, names(Merger))
+Merger= rbind(Merger, Mergerwml, fill = T)
+setorder(Merger, DATE, DECILE)
+Merger[, value_of_a_euro := cumprod(as.numeric(RETURN)+1), by = .(DECILE)]
 
 ## calculate the daily skewness
+skewness_wml_d = skewness(Merger[DECILE == "WML", RETURN])
+skewness_w_d = skewness(Merger[DECILE == 10, RETURN])
+skewness_l_d = skewness(Merger[DECILE == 1, RETURN])
 
+sd(Merger[DECILE == 10, RETURN])
 
 
 ### Generate the plot comparing the cumulative monthly return of past winner, loser, rf, and market portfolio
@@ -672,22 +709,182 @@ ggplot(MOM_COV_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO)
   scale_x_date(date_labels = "%m-%y", date_breaks = "6 months") +
   theme_classic()
 
+### Investigate with daily data
+ggplot(Merger[DECILE == 10 | DECILE == 1 | DECILE == "Risk-free"| DECILE == "MARKET", .(DATE,DECILE, value_of_a_euro)], aes(x = DATE, y = value_of_a_euro, group = DECILE, color = DECILE))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Losers","Winners", "Market", "Risk-Free")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years") + theme_classic()
 
-### investigate 2008 drop with a graph
-#### Let the cum returns start in 2006
 
+### investigate Euro area crisis drop with a graph
+MergerEuro = Merger[DECILE != value_of_a_euro]
+MergerEuro = MergerEuro[DATE >= "2007-01-01"& DATE <= "2012-12-31"]
+MergerEuro[DATE >= "2007-01-01" & DATE <= "2012-12-31", value_of_a_euro := cumprod(as.numeric(RETURN)+1), by = .(DECILE)]
 
-
-
-
-
+ggplot(MergerEuro[DECILE == 10 | DECILE == 1 | DECILE == "Risk-free"| DECILE == "MARKET", .(DATE,DECILE, value_of_a_euro)], aes(x = DATE, y = value_of_a_euro, group = DECILE, color = DECILE))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Losers","Winners", "Market", "Risk-Free")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") + theme_classic()
 
 ## investigate 2001 drop with a graph (optional)
 
+Mergerdotcom = Merger[DATE >= "1995-01-01" & DATE <= "2004-12-31"]
+Mergerdotcom = Mergerdotcom[DECILE != value_of_a_euro]
+Mergerdotcom[ , value_of_a_euro := cumprod(as.numeric(RETURN)+1), by = .(DECILE)]
+
+ggplot(Mergerdotcom[DECILE == 10 | DECILE == 1 | DECILE == "Risk-free"| DECILE == "MARKET", .(DATE,DECILE, value_of_a_euro)], aes(x = DATE, y = value_of_a_euro, group = DECILE, color = DECILE))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Losers","Winners", "Market", "Risk-Free")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") + theme_classic()
+
+### Investigate the Covid-19 Period and subsequent Ukraine - Russia conflict
+Mergercovid =  Merger[DATE >= "2019-01-01" & DATE <= "2024-11-30"]
+Mergercovid = Mergercovid[DECILE != value_of_a_euro]
+Mergercovid[ , value_of_a_euro := cumprod(as.numeric(RETURN)+1), by = .(DECILE)]
+
+#Generate plot of daily log returns during covid period and Ukraine russia conflict
+ggplot(Mergercovid[DECILE == 10 | DECILE == 1 | DECILE == "Risk-free"| DECILE == "MARKET", .(DATE,DECILE, value_of_a_euro)], aes(x = DATE, y = value_of_a_euro, group = DECILE, color = DECILE))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Losers","Winners", "Market", "Risk-Free")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") + theme_classic()
+
+### Generate table with worst 15 momentum returns and 2 year return
+## Generate the 2 Year market return
+setorder(MOM_Data, DATE)
+MOM_Data[, RM_2Y := as.numeric(log(1+((M_IND - shift(M_IND, n = 24)) / shift(M_IND, n = 24))))]
+setorder(MOM_Data, WML)
+Worst_15WML = head(MOM_Data[, .(DATE, WML, RM_2Y, RM_1M)], n = 15)
+
+# Create the table
+Worst_15WML[, Rank := .I]
+header_worst_wml = c("Date", "WML", "Mkt-2y", "Mkt")
+setnames(Worst_15WML, header_worst_wml)
+header_worst_wml = c("Date", "WML", "Mkt-2y", "Mkt")
+setcolorder(Worst_15WML,header_worst_wml)
+
+Worst_15WML[, (names(Worst_15WML)[2:4]) := lapply(.SD, function(x) round(as.numeric(x) * 100, 1)), .SDcols = 2:4]
+
+stargazer(Worst_15WML, type = "latex", title = "Worst Monthly Momentum Returns", notes = "Note: All numbers are in percent. Considered period ranging from June 1990 until November 2024.", notes.align = "l", out = paste0(path_to_output,"worst_monthly.tex"), summary = FALSE, digits = 2, single.row = T, column.sep.width = "-15pt")
 
 
+### 126-day rolling regression for estimation of beta's
+
+Mergerbetas = Merger[, .(DATE,DECILE, RETURN)]
+Mergerbetas_10 = Mergerbetas[DECILE == 10]
+Mergerbetas_1 = Mergerbetas[DECILE == 1]
+Mergerbetas_riskfree = Mergerbetas[DECILE == "Risk-free"]
+Mergerbetas_market = Mergerbetas[DECILE == "MARKET"]
+merged_data = merge(Mergerbetas_10[, .(DATE, WINNER = RETURN)], Mergerbetas_riskfree[, .(DATE, RF = RETURN)], by = "DATE")
+merged_data = merge(merged_data, Mergerbetas_1[, .(DATE, LOSER = RETURN)], by = "DATE")
+merged_data = merge(merged_data, Mergerbetas_market[,.(DATE, MKT = RETURN)], by = "DATE")
+merged_data[, excess_10 := WINNER - RF]
+merged_data[, excess_1 := LOSER - RF]
+merged_data[, excess_mkt := MKT - RF]
 
 
+## Create lagged values of excess market return for the rolling regression
+for (i in 1:10) {
+  merged_data[, paste0("lag_", i) := shift(excess_mkt, n = i, type = "lag")]
+}
+
+## Calculate the 126 days rolling regression for Winner portfolio
+
+rolling_regression10 = rollapplyr(
+  data = merged_data[, .(excess_10, excess_mkt, lag_1, lag_2, lag_3, lag_4, lag_5, lag_6, lag_7, lag_8, lag_9, lag_10)],
+  width = 126,
+  FUN = function(sub_data) {
+    model = lm(excess_10 ~ ., data = as.data.frame(sub_data))
+    return(coef(model))
+  },
+  by.column = FALSE,
+  align = "right", fill = NA
+)
+
+coefficient_names = c("Alpha_10", "Beta_10_0", paste0("Beta_10_", 1:10))
+regression_results10 = as.data.table(rolling_regression10)
+setnames(regression_results10, coefficient_names)
+merged_data = cbind(merged_data, regression_results10)
+
+## Calculate the 126 days rolling regression for Loser portfolio
+
+rolling_regression1 = rollapplyr(
+  data = merged_data[, .(excess_1, excess_mkt, lag_1, lag_2, lag_3, lag_4, lag_5, lag_6, lag_7, lag_8, lag_9, lag_10)],
+  width = 126,
+  FUN = function(sub_data) {
+    model = lm(excess_1 ~ ., data = as.data.frame(sub_data))
+    return(coef(model))
+  },
+  by.column = FALSE,
+  align = "right", fill = NA
+)
+
+coefficient_names = c("Alpha_1", "Beta_1_0", paste0("Beta_1_", 1:10))
+regression_results1 = as.data.table(rolling_regression1)
+setnames(regression_results1, coefficient_names)
+merged_data = cbind(merged_data, regression_results1)
+
+### Calculate the betas per date per portfolio
+merged_data[, Beta_Winner := rowSums(.SD), by = DATE, .SDcols = grep("^Beta_10_", names(merged_data), value = TRUE)]
+merged_data[, Beta_Loser := rowSums(.SD), by = DATE, .SDcols = grep("^Beta_1_", names(merged_data), value = TRUE)]
+
+## Melt the data.table to plot the graph
+
+Beta_plot = melt(merged_data, id.vars = c("DATE"), measure.vars = c("Beta_Winner", "Beta_Loser"), variable.name = c("Portfolio"), value.name =  ("Beta"), na.rm = T)
+Beta_plot = as.data.table(Beta_plot)
+setorder(Beta_plot,DATE, Portfolio)
+
+
+## Overall from 1990 until now
+ggplot(Beta_plot, aes(x = DATE, y = Beta, group = Portfolio, color = Portfolio))+
+  geom_line() +
+  xlab("Date") + ylab("Beta") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Winners","Losers")) +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "3 years") +
+  scale_y_continuous(breaks = c(seq(-2,6,1)))+
+  theme_bw()
+
+## Beta development covid crisis and russia ukraine conflict
+ggplot(Beta_plot[DATE >= "2019-01-01" & DATE <= "2024-11-30"], aes(x = DATE, y = Beta, group = Portfolio, color = Portfolio))+
+  geom_line() +
+  xlab("Date") + ylab("Beta") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Winners","Losers")) +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") +
+  scale_y_continuous(breaks = c(seq(-2,6,1)))+
+  theme_bw()
+
+## Beta development Euro-area crisis
+ggplot(Beta_plot[DATE >= "2007-01-01"& DATE <= "2012-12-31"], aes(x = DATE, y = Beta, group = Portfolio, color = Portfolio))+
+  geom_line() +
+  xlab("Date") + ylab("Beta") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Winners","Losers")) +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") +
+  scale_y_continuous(breaks = c(seq(-2,6,1)))+
+  theme_bw()
+
+## Beta development dot.com bubble
+ggplot(Beta_plot[DATE >= "1995-01-01" & DATE <= "2004-12-31"], aes(x = DATE, y = Beta, group = Portfolio, color = Portfolio))+
+  geom_line() +
+  xlab("Date") + ylab("Beta") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("Winners","Losers")) +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") +
+  scale_y_continuous(breaks = c(seq(-2,6,1)))+
+  theme_bw()
 
 
 ### Read in the data used in Daniel & Moskowitz
