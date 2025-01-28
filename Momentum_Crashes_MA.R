@@ -569,6 +569,8 @@ Sharpe_Ratio_TWO_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(TWO-RF_1M
 Sharpe_Ratio_RM_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(RM_1M-RF_1M, na.rm = T)/sd(RM_1M-RF_1M, na.rm = T))*sqrt(12)]
 
 
+MOM_Data[DATE > "1990-07" & !is.na(RF_1M), sd(RM_1M-RF_1M, na.rm = T)*sqrt(12)]
+
 
 MOM_Data[DATE > "1990-06"& !is.na(RF_1M), mean(RM_1M-RF_1M, na.rm = T)]
 MOM_Data[DATE > "1990-06"& !is.na(RF_1M), sd(RM_1M-RF_1M, na.rm = T)]
@@ -779,7 +781,7 @@ Worst_15WML[, (names(Worst_15WML)[2:4]) := lapply(.SD, function(x) round(as.nume
 stargazer(Worst_15WML, type = "latex", title = "Worst Monthly Momentum Returns", notes = "Note: All numbers are in percent. Considered period ranging from June 1990 until November 2024.", notes.align = "l", out = paste0(path_to_output,"worst_monthly.tex"), summary = FALSE, digits = 2, single.row = T, column.sep.width = "-15pt")
 
 
-### 126-day rolling regression for estimation of beta's
+############################################ 126-day rolling regression for estimation of beta's ########################
 
 Mergerbetas = Merger[, .(DATE,DECILE, RETURN)]
 Mergerbetas_10 = Mergerbetas[DECILE == 10]
@@ -885,6 +887,128 @@ ggplot(Beta_plot[DATE >= "1995-01-01" & DATE <= "2004-12-31"], aes(x = DATE, y =
   scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") +
   scale_y_continuous(breaks = c(seq(-2,6,1)))+
   theme_bw()
+
+################# Option-like behavior of the WML portfolio #########################
+## Create the Bear market indicator
+setorder(MOM_Data, DATE)
+MOM_Data[, IB := ifelse(RM_2Y < 0, 1, 0)]
+
+## Create the Up-Market indicator
+MOM_Data[, IU := ifelse(EX_RET_MKT > 0, 1, 0)]
+
+## Create the four regressions with the indicators
+WML_uncond_mm = lm(data = MOM_Data[DATE >= "1990-07"], WML ~ 1+ EX_RET_MKT )
+WML_cond_capm = lm(data = MOM_Data[DATE >= "1990-07"], WML ~ 1+ IB*EX_RET_MKT)
+WML_option_beh = lm(data = MOM_Data[DATE >= "1990-07"], WML ~ 1+ IB * EX_RET_MKT+IB:IU:EX_RET_MKT)
+WML_option_beh_s = lm(data = MOM_Data[DATE >= "1990-07"], WML ~ 1+ EX_RET_MKT + IB:EX_RET_MKT+IB:IU:EX_RET_MKT)
+
+stargazer(WML_uncond_mm, WML_cond_capm, WML_option_beh, WML_option_beh_s, type="latex", intercept.top = T,intercept.bottom = F,
+           out=paste0(path_to_output,"Option_like_behavior.tex"))
+
+
+summary(WML_option_beh)
+summary(WML_option_beh_s)
+tab_model(WML_uncond_mm, WML_cond_capm, WML_option_beh, WML_option_beh_s, show.ci = F, show.obs = F,title = "Market Timing Regression Results", p.style = "stars" , dv.labels = "WML", show.r2 = T )
+
+###### Dynamic Weighting of Momentum Portfolio ########
+Mergerwml = Mergerwml[!is.na(RETURN)]
+
+### fit the GJR-Garch model on the daily returns of the WML 
+gjrgarchspec = ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder= c(1,1)), mean.model = list(armaOder = c(1,1)), distribution.model = "std")
+gjrfit  = ugarchfit(data = Mergerwml$RETURN, spec = gjrgarchspec)
+
+summary(gjrfit)
+gjrfit
+coef(gjrfit)
+length(gjrfit@fit$sigma)
+
+## Estimate the 22 day volatility to be put into the optimal sharpe ratio weighting
+rolling_gjr = ugarchroll(data = Mergerwml$RETURN, spec = gjrgarchspec, refit.every = 22, forecast.length = MOM_Data[DATE >= "1990-07", .N], refit.window = "moving" )
+GJRFORE = rolling_gjr@forecast$density$Sigma
+GJRFORE = as.data.table(GJRFORE)
+GJRFORE = GJRFORE[-1]
+### Create empty data.table to rbind() GJR-Garch estimates onto it to cbind() forecasts to monthly Momentum data in MOM_Data
+#empty_rows = data.table(matrix(NA, nrow = MOM_Data[DATE < "1990-07", .N], ncol = ncol(GJRFORE)))
+#setnames(empty_rows, names(GJRFORE))
+#GJRFORE = rbind(empty_rows,GJRFORE)
+
+### Attach GJR Garch estimates as another column
+MOM_Data = cbind(MOM_Data,GJRFORE)
+
+###Estimate the 126 day rolling estimate of the variance of the market returns
+merged_data[, MKT_R_VAR := rollapply(excess_mkt,width = 126,FUN = var ,align = "right", fill = NA)]
+
+### Estimate Regression for Expected WML Return forecast
+
+# retrieve the last value before relevant month for rolling var of market returns
+merged_data[, Month_Year := ym(format(as.Date(DATE), "%Y-%m"))]
+last_dates = merged_data[, .(Last_Date = max(DATE)), by = Month_Year]
+
+
+# Step 3: Join the last dates with the originDATE# Step 3: Join the last dates with the original data to get the corresponding variance
+variance_at_last_dates = merge(merged_data[, .(DATE,MKT_R_VAR)], last_dates, by.x = "DATE", by.y = "Last_Date")
+variance_at_last_dates[, DATE := format(as.Date(DATE), "%Y-%m")]
+variance_at_last_dates[, MKT_R_VAR:= shift(MKT_R_VAR, n = 1)]
+MOM_Data = merge(MOM_Data, variance_at_last_dates, by = "DATE")
+MOM_Data[, IB := shift(IB, n = 1)]
+#### Forecasting future WML Returns
+Exp_WML_Ret_reg = lm(data = MOM_Data, WML ~ IB*MKT_R_VAR )
+summary(Exp_WML_Ret_reg)
+
+MOM_Data[, Month_Year := NULL ]
+MOM_Data[, MKT_R_VAR := NULL ]
+
+### Determine the forecasts from the linear time-series regression for the weighting parameter
+for_coef = coef(Exp_WML_Ret_reg)
+MOM_Data[, WML_mu := for_coef[1]+for_coef[2]*IB+for_coef[3]*MKT_R_VAR+for_coef[2]*IB*for_coef[3]*MKT_R_VAR]
+
+### For the weighting of the optimal sharpe ratio portfolio,lambda is chosen so that the in-sample annualized volatility is = 19%
+#See derivation in Appendix C of Daniel & Moskowitz (2016)
+## Provisionally define Lambda
+MOM_Data[, Lambda := 1.52]
+
+## Calc the weighting of WML/(WML+RF)
+MOM_Data[, WML_Weight := (1/2*Lambda)*WML_mu/GJRFORE]
+
+### Testing whether the weighting exceeds one or is below 0
+MOM_Data[ WML_Weight<0 | WML_Weight > 1]
+
+## Cap the Weighting to 100%
+MOM_Data[ WML_Weight >=  1, WML_Weight:= 1]
+
+####  Recalculate the return of the Portfolio with dynamic weighting
+MOM_Data[,DYNWML := WML_Weight*RF_1M + (1-WML_Weight)*RF_1M]
+
+MOM_Data[, ((1+var(DYNWML, na.rm = T))**12)-1]
+
+comp_res = MOM_Data[, .(DATE, WML, DYNWML)]
+comp_res = comp_res[!is.na(DYNWML)]
+
+comp_res[, value_of_a_euro_wml := cumprod(1+WML) ]
+comp_res[, value_of_a_euro_dynwml := cumprod(1+DYNWML)]
+
+comp_res_l = melt(comp_res,id.vars = c("DATE"), measure.vars = c("value_of_a_euro_wml", "value_of_a_euro_dynwml"),  na.rm = T)
+comp_res_l[, DATE := ym(DATE)]
+setnames(comp_res_l, c("DATE", "PORTFOLIO", "VALUE"))
+setorder(comp_res_l, DATE, PORTFOLIO)
+
+
+ggplot(comp_res_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
+  geom_line() +
+  xlab("Date") + ylab("Portfolio Value") +
+  theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
+  scale_colour_discrete(labels = c("WML", "DYN WML")) +
+  scale_y_continuous(trans="log10") +
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years")
+
+
+
+summary(gjrfit )
+
+
+
+## Cap the weighting param to not exceed 1 
+
 
 
 ### Read in the data used in Daniel & Moskowitz
