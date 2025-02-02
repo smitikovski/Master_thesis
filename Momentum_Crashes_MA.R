@@ -130,24 +130,20 @@ colnames(FSE_Daily)
 
 stock_columns = setdiff(names(FSE_Daily), "DATE")
 
-first_values <- FSE_Daily[, lapply(.SD, function(x) x[which(!is.na(x))[1]]), .SDcols = stock_columns]
-first_values_vector <- unlist(first_values, use.names = TRUE)
-valid_stocks <- names(first_values_vector[first_values_vector >= 1])
-FSE_Daily = FSE_Daily[, c("DATE", valid_stocks), with = FALSE]
-
 ## Make a data copy so data transformations will not have an impact on the initial file ### to be removed - check
 FSE_daily_p = copy(FSE_Daily)
 FSE_daily_p = as.data.table(FSE_daily_p)
 
 # Making sure there is only one column per stock
 unique_cols_d = !duplicated(colnames(FSE_daily_p))
-FSE_daily_p = FSE_daily_p[, ..unique_cols]
+FSE_daily_p = FSE_daily_p[, ..unique_cols_d]
+
 colnames(FSE_daily_p)
 setcolorder(FSE_daily_p, sort(colnames(FSE_daily_p)))
 columns_to_keep2_d = !grepl("#ERROR", colnames(FSE_daily_p))
 FSE_daily_p = FSE_daily_p[, ..columns_to_keep2_d]
-setnames(FSE_daily_p, c(""),c( "DATE"))
 setkey(FSE_daily_p, DATE)
+
 
 ###Calculate the Stock returns for the portfolio returns
  # Melt DT to calc the monthly returns
@@ -169,12 +165,18 @@ setorder(FSE_daily_p_l, Stock, DATE)
 FSE_daily_p_l[, DATE := ymd(DATE)]
 FSE_daily_p_l[, Stock := as.character(Stock)]
 
-######## TO DO - Testen!!!! 
+######## No. of stocks
 uniqueN(FSE_daily_p_l$Stock)
 FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
 
-#FSE_daily_p_l[, Daily_Return := as.numeric((Price - shift(Price, n = 1)) / shift(Price, n = 1)), by = Stock]
+
+### Cleanse for daily return spikes as in Hanauer
+FSE_daily_p_l[, Daily_Return := as.numeric(log(1+(Price - shift(Price, n = 1)) / shift(Price, n = 1))), by = Stock]
+FSE_daily_p_l[, Monthly_Return := as.numeric(log(1+(Price - shift(Price, n = 22)) / shift(Price, n = 22))), by = Stock]
+FSE_daily_p_l = FSE_daily_p_l[Price <=1000000 | is.na(Price)]
+FSE_daily_p_l = FSE_daily_p_l[Daily_Return <= 2 | is.na(Daily_Return)]
+FSE_daily_p_l = FSE_daily_p_l[Monthly_Return <= 9.9 | is.na(Monthly_Return)]
 #FSE_daily_p_l[!is.na(Daily_Return)]
 
 # Get the monthly returns, market value at the end of the months and the 11 month returns from daily data
@@ -185,39 +187,59 @@ FSE_Daily[, DATE := as.Date(DATE)]
 # Sort the dataset by DATE to ensure proper order
 setorder(FSE_Daily, DATE)
 
-# Function to get the first available date in each month
+# Function to get the last available date in each month
 get_last_in_month <- function(dates) {
-  # Extract the year-month for grouping
-  dates_dt <- data.table(DATE = dates, YearMonth = floor_date(dates, "month"))
+  dates_dt <- data.table(DATE = dates)
   
-  # Find the last date in each month
+  # Extract Year-Month as a character to prevent unintended rounding issues
+  dates_dt[, YearMonth := format(DATE, "%Y-%m")]
+  
+  # Get the actual last available date per month
   result <- dates_dt[, .(Last_DATE = max(DATE)), by = YearMonth]
   
   return(result)
 }
 
 ### Get ceiling dates for the daily data of German stocks
-last_dates <- get_last_in_month(FSE_daily_p_l$DATE)
+last_dates=get_last_in_month(FSE_daily_p_l$DATE)
 last_dates[, Last_DATE := as.Date(Last_DATE)] 
+FSE_daily_p_l[DATE == "2024-03-29"]
 
 # Merge with main data table
 FSE_ceiling = FSE_daily_p_l[last_dates, on = .(DATE = Last_DATE)]
 FSE_ceiling[, YearMonth := NULL]
 FSE_ceiling[, DATE := format(DATE, "%Y-%m")]
 
+FSE_ceiling[DATE =="2024-03"]
 
+##Cleanse stock prices above 1,000,000
+#FSE_ceiling = FSE_ceiling[Price<= 1000000 | is.na(NA)]
+
+FSE_ceiling[Price == "-Inf"]
 ### Create 11 month return as defined in Jegadeesh 1993 and monthly return of the stocks
-FSE_ceiling[, Return_11M := as.numeric(log(1+((Price - shift(Price, n = 11)) / shift(Price, n = 11)))), by = Stock]
-FSE_ceiling[, REL_RET := shift(Return_11M, n = 1, type = "lag"), by = Stock]
-FSE_ceiling[, REL_MV := shift(MV, n = 1, type = "lag"), by = Stock]
-FSE_ceiling[, Return_1M := as.numeric(log(1+((Price - shift(Price, n = 1)) / shift(Price, n = 1)))), by = Stock]
- 
+FSE_ceiling[, Return_11M := fifelse(shift(Price, n = 11) == 0 | Price == 0, NA_real_,
+                                    log(Price / shift(Price, n = 11))),
+            by = Stock]
+setorder(FSE_ceiling, Stock, DATE)
+FSE_ceiling[, REL_RET := shift(Return_11M, n = 2, type = "lag"), by = Stock]
+FSE_ceiling[, REL_MV := MV, by = Stock]
+#FSE_ceiling[, REL_MV := shift(MV, n = 1, type = "lag"), by = Stock]
+FSE_ceiling[, Return_1M := fifelse(shift(Price, n = 1) == 0 | Price == 0, NA_real_,
+                                   log(Price / shift(Price, n = 1))),
+            by = Stock]
+
+#FSE_ceiling[ , sum(WEIGHT, na.rm = TRUE), by = .(DATE, Decile)]
+
+FSE_ceiling = FSE_ceiling[!is.na(Price)]
+
+FSE_ceiling[Decile == 5 & DATE == "2020-01", mean(Return_1M, na.rm = T)] 
 ##### Cleansing of stock return data
-## Cleanse return spices
-FSE_ceiling = FSE_ceiling[Return_1M <= 9.9]
+## Cleanse return spikes
+#FSE_ceiling = FSE_ceiling[Return_1M <= 9.9 | is.na(Return_1M)]
 
-
-
+## Cleanse strong monthly return reversals
+#FSE_ceiling = FSE_ceiling[!(Return_1M >= 3 | shift(Return_1M, n=1) >= 3 | is.na(Return_1M) & (1+shift(Return_1M, n=1))*(1+Return_1M) < 0.5) | is.na(Return_1M)]
+setorder(FSE_ceiling, DATE, Stock)
 
 ### Get ceiling dates for the daily data of CDAX Performance Index for the calc of monthly returns
 last_dates = get_last_in_month(CDAX_IND$DATE)
@@ -235,6 +257,15 @@ FSE_ceiling[, Decile := fifelse(
                  include.lowest = TRUE, labels = FALSE)),
   NA_integer_), by = DATE]
 
+#FSE_ceiling[, Decile := fifelse(
+#  !is.na(REL_RET),  
+#  as.integer(cut(REL_RET,
+#                 breaks = quantile(REL_RET, probs = seq(0, 1, 0.2), na.rm = TRUE),
+#                 include.lowest = TRUE, labels = FALSE)),
+#  NA_integer_), by = DATE]
+
+FSE_ceiling[Decile == 1 & DATE == "2020-01" & is.na(WRET)]
+
 
 # Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
 FSE_ceiling[, Price := {
@@ -248,6 +279,8 @@ FSE_ceiling[, Price := {
   Price
 }, by = Stock]
 
+
+
 FSE_daily_p_l[, .(Unique_Stocks = uniqueN(Stock)), by = DATE][Unique_Stocks < 11, DATE]
 FSE_ceiling[!is.na(Price), .(Stocks_Non_NA = uniqueN(Stock)), by = DATE][Stocks_Non_NA < 11, DATE]
 FSE_ceiling[DATE == "2020-05" & !is.na(Price)]
@@ -256,25 +289,16 @@ FSE_ceiling[DATE == "2020-05" & !is.na(Price)]
 FSE_ceiling[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
 FSE_ceiling[, WRET := Return_1M*WEIGHT]
 
-FSE_ceiling[ DATE == "2024-01" & Decile  == 10]
-FSE_ceiling[ DATE == "2024-02" & Decile  == 10, sum(WRET)]
-FSE_ceiling[ DATE == "2024-03" & Decile  == 1, sum(WRET)]
+#FSE_ceiling[, WRET := mean(Return_1M, na.rm = T), by =.(DATE, Decile)]
 
-MOM_Data[DATE == "2010-07", WML]
+FSE_ceiling[, mean(Return_1M, na.rm = T), by =.(DATE, Decile)]
 
-FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WEIGHT)]
-FSE_ceiling[ DATE == "2024-03-01" & Decile  == 10, sum(WRET)]
-FSE_ceiling[ DATE == "2024-04-02" & Decile  == 9, sum(WRET, na.rm = T)]
-FSE_ceiling[ DATE == "2024-05-01" & Decile  == 10, sum(WRET)]
-FSE_ceiling[ DATE == "2024-01-01" & Decile  == 10, sum(WRET)]
-FSE_ceiling[ DATE == "2024-04-04" & Decile  == 2]
-
-FSE_ceiling[ Decile  == 10, mean(WRET)]
-
-FSE_ceiling[ DATE == "2024-01" & Decile  == 1, sum(WEIGHT)]
-
+# Check whether value weighting worked
+FSE_ceiling[WRET == "-Inf"]
+FSE_ceiling[ DATE == "2024-02" & Decile  == 10, sum(WEIGHT)]
+FSE_ceiling[ DATE == "2024-02" & Decile  == 5, sum(WEIGHT)]
 # Creation of Returns per decile
-MOM_Data = FSE_ceiling[Decile==10 , sum(WRET, na.rm = T), by = DATE]
+MOM_Data = FSE_ceiling[Decile==10, sum(WRET, na.rm = T), by = DATE]
 MOM_Data1= FSE_ceiling[Decile==9 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data2= FSE_ceiling[Decile==8 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data3= FSE_ceiling[Decile==7 , sum(WRET, na.rm = T), by = DATE]
@@ -285,6 +309,24 @@ MOM_Data7= FSE_ceiling[Decile==3 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data8= FSE_ceiling[Decile==2 , sum(WRET, na.rm = T), by = DATE]
 MOM_Data9= FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
 
+
+
+### Creation of Returns per quintile
+#MOM_Data = FSE_ceiling[Decile==5, sum(WRET, na.rm = T), by = DATE]
+#MOM_Data1= FSE_ceiling[Decile==4 , sum(WRET, na.rm = T), by = DATE]
+#MOM_Data2= FSE_ceiling[Decile==3 , sum(WRET, na.rm = T), by = DATE]
+#MOM_Data3= FSE_ceiling[Decile==2 , sum(WRET, na.rm = T), by = DATE]
+#MOM_Data4= FSE_ceiling[Decile==1 , sum(WRET, na.rm = T), by = DATE]
+
+
+
+#setnames(MOM_Data, c("DATE", "WINNER"))
+#setnames(MOM_Data1, c("DATE", "FOUR"))
+#setnames(MOM_Data2, c("DATE", "THREE"))
+#setnames(MOM_Data3, c("DATE", "TWO"))
+#setnames(MOM_Data4, c("DATE", "LOSER"))
+
+################ See whether still relevant
 setnames(MOM_Data, c("DATE", "WINNER"))
 setnames(MOM_Data1, c("DATE", "NINE"))
 setnames(MOM_Data2, c("DATE", "EIGHT"))
@@ -295,6 +337,8 @@ setnames(MOM_Data6, c("DATE", "FOUR"))
 setnames(MOM_Data7, c("DATE", "THREE"))
 setnames(MOM_Data8, c("DATE", "TWO"))
 setnames(MOM_Data9, c("DATE", "LOSER"))
+
+
 
 setorder(MOM_Data, DATE)
 
@@ -309,36 +353,58 @@ MOM_Data = merge(MOM_Data, MOM_Data7, by = c("DATE"))
 MOM_Data = merge(MOM_Data, MOM_Data8, by = c("DATE"))
 MOM_Data = merge(MOM_Data, MOM_Data9, by = c("DATE"))
 CDAX_IND[, DATE := ym(DATE)]
-MOM_Data = merge(MOM_Data, CDAX_M, by = c("DATE"), all.x = T)
+
 MOM_Data[, WML := WINNER-LOSER]
+MOM_Data[, mean(WINNER)]
+MOM_Data[, mean(NINE)]
+MOM_Data[, mean(EIGHT)]
+MOM_Data[, mean(LOSER)]
+
+MOM_Data[, RF_1M.y:= NULL]
+MOM_Data[, RF_1M_D:= NULL]
+MOM_Data[, RF_1M_M:= NULL]
+MOM_Data[, RM_1M:= NULL]
+MOM_Data[,M_IND:= NULL]
+MOM_Data[,value_of_a_euro_wml := NULL]
+MOM_Data[,value_of_a_euro_losers := NULL]
+MOM_Data[,value_of_a_euro_rf := NULL]
+MOM_Data[,value_of_a_euro_rm := NULL]
+
+RF_Interest[, DATE := format(DATE, "%Y-%m")]
+
 
 ## Add the Risk-free data (FIBOR & EURIBOR one-month interest rates)
 MOM_Data = merge(MOM_Data, RF_Interest, by = c("DATE"), all.x = T )
-
-MOM_Data[, RF_1M:= NULL]
+MOM_Data = merge(MOM_Data, CDAX_M, by = c("DATE"), all.x = T)
 
 MOM_Data[!is.na(WINNER) & DATE > "1990-06" , value_of_a_euro_winners := cumprod(1+WINNER)]
 MOM_Data[!is.na(LOSER) & DATE > "1990-06" , value_of_a_euro_losers := cumprod(1+LOSER)]
-MOM_Data[!is.na(WML) & DATE > "1990-06"    , value_of_a_euro_wml := cumprod(1+WML)]
-MOM_Data[ !is.na(RF_1M) & DATE > "1990-06"    , value_of_a_euro_rf := cumprod(1+RF_1M)]
+MOM_Data[!is.na(WML) & DATE > "1990-06"    , value_of_a_euro_wml := cumprod(1+(WML+RF_1M_M))]
+MOM_Data[!is.na(RF_1M_M) & DATE > "1990-06"    , value_of_a_euro_rf := cumprod(1+RF_1M_M)]
 MOM_Data[!is.na(RM_1M) & DATE > "1990-06" , value_of_a_euro_rm := cumprod(1+RM_1M)]
 
-WML_Data_l = melt(WML_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
-setnames(WML_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
+MOM_Data_l = melt(MOM_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
+setnames(MOM_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
 
+MOM_Data[, mean(WML)- mean(RF_1M_M, na.rm = T)]*sqrt(12)
+
+MOM_Data[, mean(WML)]
+
+(1+0.89)*sqrt(12)
 
 # Calculate the cumulated return of month t-12 to t-2  ###### can be removed!!! 
 
 #FSE_monthly_p_l[, Return_2L := as.numeric(shift(Return, n = 2, type = "lead")), by = variable]
-FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)] 
+###FSE_monthly_p_l[, Return_cs := frollmean(Return, 11)] 
 
-
+rm(FSE_daily_p_l)
 ## Calculate the monthly returns based on the daily data
-FSE_daily_p_l = melt(FSE_daily_p, id.vars = c("DATE"),,  variable.name = "Stock", value.name = c("Price", "MarketValue"))
+FSE_daily_p_l = melt(FSE_daily_p, id.vars = c("DATE"),  variable.name = c("Stock"), value.name = c("Price", "MarketValue"))
 FSE_daily_p_l[, value := as.numeric(value)]
 FSE_daily_p_l[, Return := as.numeric(log(1+(Price - shift(Price, n = 1)) / shift(Price, n = 1))), by = Stock]
 FSE_daily_p_l[, Date := ymd(Date)]
 
+########### delete below
 
 ### Momentum Portfolio
 # Rank stocks according to their return and put them into deciles
@@ -400,19 +466,20 @@ WML_Data[!is.na(LOSER), value_of_a_euro_losers := cumprod(1+LOSER)]
 WML_Data[!is.na(WML), value_of_a_euro_wml := cumprod(1+WML)]
 WML_Data[ !is.na(RF_1M), value_of_a_euro_rf := cumprod(1+RF_1M)]
 
+##########################delete above
 
+##WML_Data_l = melt(WML_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
+##setnames(WML_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
 
-WML_Data_l = melt(WML_Data, id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_wml", "value_of_a_euro_rf"),  na.rm = T)
-setnames(WML_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
-
-
+######## Kann raus
+MOM_Data_l[, DATE := ym(DATE)]
 ## Plotting of results
-ggplot(WML_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
+ggplot(MOM_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
   geom_line() +
   xlab("Date") + ylab("Portfolio Value") +
   theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
   scale_colour_discrete(labels = c("Winners", "Losers", "WML", "Risk-Free")) +
-  scale_y_continuous(trans="log10") +
+ # scale_y_continuous(trans="log10") +
   scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years")
   
 
@@ -448,27 +515,38 @@ FSE_combined = FSE_combined[DATE < "2024-12-31"]
 
 ## Sharpe Ratio based on MOM Data
 #Create the values for the excess return over the risk-free rate
-MOM_Data[, EX_RET_WML :=  WML-RF_1M]
-MOM_Data[, EX_RET_W := WINNER-RF_1M]
-MOM_Data[, EX_RET_L := LOSER-RF_1M]
-MOM_Data[, EX_RET_MKT := RM_1M-RF_1M]
+MOM_Data[, EX_RET_WML :=  WML-RF_1M_M]
+MOM_Data[, EX_RET_W := WINNER-RF_1M_M]
+MOM_Data[, EX_RET_L := LOSER-RF_1M_M]
+MOM_Data[, EX_RET_MKT := RM_1M-RF_1M_M]
+MOM_Data[, EX_RET_FIVE := FIVE - RF_1M_M]
 
-MOM_Data[, sd(EX_RET_WML, na.rm=T)]
+
+
+round(MOM_Data[DATE > "1990-06" &DATE <"2024-11", mean(EX_RET_MKT, na.rm = T)]*sqrt(12)*100,2)
+round(MOM_Data[DATE > "1990-06" &DATE <"2024-11", sd(EX_RET_MKT, na.rm = T)]*sqrt(12)*100,2)
+
+MOM_Data[, sd(EX_RET_L, na.rm=T)]
 
 ## Calculate the Sharpe Ratios for the Portfolios (from July 1990 as this is the start of the FIBOR time series)
-Sharpe_Ratio_WML_ALL = MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(EX_RET_WML, na.rm = T)/sd(EX_RET_WML, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_WML_ALL = MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(WML, na.rm = T)/sd(WML, na.rm = T))*sqrt(12)]
 Sharpe_Ratio_W_ALL = MOM_Data[DATE > "1990-06"& !is.na(RF_1M), (mean(EX_RET_W, na.rm = T)/sd(EX_RET_W, na.rm = T))*sqrt(12)]
 Sharpe_Ratio_L_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(EX_RET_L, na.rm = T)/sd(EX_RET_L, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_NINE_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(NINE-RF_1M, na.rm = T)/sd(NINE-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_EIGHT_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(EIGHT-RF_1M, na.rm = T)/sd(EIGHT-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_SEVEN_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(SEVEN-RF_1M, na.rm = T)/sd(SEVEN-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_SIX_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(SIX-RF_1M, na.rm = T)/sd(SIX-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_FIVE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FIVE-RF_1M, na.rm = T)/sd(FIVE-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_FOUR_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FOUR-RF_1M, na.rm = T)/sd(FOUR-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_THREE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(THREE-RF_1M, na.rm = T)/sd(THREE-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_TWO_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(TWO-RF_1M, na.rm = T)/sd(TWO-RF_1M, na.rm = T))*sqrt(12)]
-Sharpe_Ratio_RM_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(RM_1M-RF_1M, na.rm = T)/sd(RM_1M-RF_1M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_NINE_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(NINE-RF_1M_M, na.rm = T)/sd(NINE-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_EIGHT_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(EIGHT-RF_1M_M, na.rm = T)/sd(EIGHT-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_SEVEN_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(SEVEN-RF_1M_M, na.rm = T)/sd(SEVEN-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_SIX_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M_M), (mean(SIX-RF_1M_M, na.rm = T)/sd(SIX-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_FIVE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FIVE-RF_1M_M, na.rm = T)/sd(FIVE-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_FOUR_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(FOUR-RF_1M_M, na.rm = T)/sd(FOUR-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_THREE_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(THREE-RF_1M_M, na.rm = T)/sd(THREE-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_TWO_ALL= MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(TWO-RF_1M_M, na.rm = T)/sd(TWO-RF_1M_M, na.rm = T))*sqrt(12)]
+Sharpe_Ratio_RM_ALL = MOM_Data[DATE > "1990-06" & !is.na(RF_1M), (mean(RM_1M-RF_1M_M, na.rm = T)/sd(RM_1M-RF_1M_M, na.rm = T))*sqrt(12)]
 
+Sharpe_Ratio_WML_ALL
+Sharpe_Ratio_W_ALL
+Sharpe_Ratio_L_ALL
+Sharpe_Ratio_FIVE_ALL
+Sharpe_Ratio_RM_ALL
 
 MOM_Data[DATE > "1990-07" & !is.na(RF_1M), sd(RM_1M-RF_1M, na.rm = T)*sqrt(12)]
 MOM_Data[DATE > "1990-06"& !is.na(RF_1M), mean(RM_1M-RF_1M, na.rm = T)]
@@ -499,6 +577,26 @@ W_alpha= W_reg$coefficients["(Intercept)"]
 W_beta= W_reg$coefficients["EX_RET_MKT"]
 L_alpha= L_reg$coefficients["(Intercept)"]
 L_beta= L_reg$coefficients["EX_RET_MKT"]
+Five_alpha = FIVE_reg$coefficients["(Intercept)"]
+Five_beta= FIVE_reg$coefficients["EX_RET_MKT"]
+
+round(WML_alpha*sqrt(12)*100,2)
+WML_beta
+round(W_alpha*sqrt(12)*100,2)
+W_beta
+round(L_alpha*sqrt(12)*100,2)
+L_beta
+round(Five_alpha*sqrt(12)*100,2)
+Five_beta
+
+Five_alpha
+tab_model(WML_reg)
+
+
+
+
+WML_alpha*sqrt(12)
+
 
 summary(WML_reg)
 tab_model(WML_reg)
@@ -507,9 +605,21 @@ tab_model(L_reg)
 
 stargazer(WML_reg)
 
-skewness_wml_m = skewness(MOM_Data$WML)
+skewness_wml_m = skewness(log(1 + exp(MOM_Data$WML) + MOM_Data$RF_1M_M))
 skewness_w_m = skewness(MOM_Data$WINNER)
 skewness_l_m = skewness(MOM_Data$LOSER)
+skewness(MOM_Data$FIVE)
+skewness_l_m
+
+
+skewness(MOM_daily[Decile == 10])
+skewness(MOM_daily[Decile == 5])
+skewness(MOM_daily[Decile == 1])
+skewness(MOM_daily[Decile == "MARKET"])
+skewness(MOM_daily[Decile == , Return])
+
+
+
 
 ## Generate the table in the style of Daniel & Moskowitz
 ## Generate empty data.table
@@ -526,26 +636,37 @@ FSE_daily_p_l[, YearMonth := format(DATE, "%Y-%m")]
 FSE_ceiling[, YearMonth := format(ym(DATE), "%Y-%m")]
 
 # Perform a left join of daily_data with monthly_data to get the Decile column
-MOM_daily = merge(FSE_daily_p_l, FSE_ceiling[, .(Stock, YearMonth, Decile)], by = c("Stock", "YearMonth"), all.x = TRUE)
+MOM_daily = merge(FSE_daily_p_l, FSE_ceiling[, .(Stock, YearMonth, Decile, WEIGHT)], by = c("Stock", "YearMonth"), all.x = TRUE)
 
 # Remove the YearMonth column if not needed
 MOM_daily[, YearMonth := NULL]
 
-MOM_daily_wml = MOM_daily[ DATE >= "1990-07-01",   ]
+MOM_daily_wml = MOM_daily[ DATE >= "1990-07-01"]
 
-MOM_daily[, REL_MV := shift(MV, n = 1, type = "shift")]
 
-MOM_daily[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
-MOM_daily[, WRET := Return*WEIGHT]
-MOM_daily[ DATE == "2020-10-1" & Decile == 10, sum(WEIGHT)]
 
-Merger = MOM_daily[ DATE >= "1990-07-01", sum(WRET), by = .(DATE, Decile)]
+#MOM_daily[, REL_MV := shift(MV, n = 1, type = "shift")]
+MOM_daily[, RETURN := fifelse(shift(Price, n = 1) == 0 | Price == 0, NA_real_,
+                                    log(Price / shift(Price, n = 1))),
+             by = Stock]
+MOM_daily[is.na(RETURN) & Decile == 10]
+MOM_daily = MOM_daily[!is.na(Price)]
+
+#MOM_daily[, WEIGHT := REL_MV/sum(REL_MV, na.rm = T), by = .(DATE, Decile)]
+MOM_daily[, WRET := RETURN*WEIGHT]
+MOM_daily[ DATE == "2020-10-1" & Decile == 10, sum(WRET)]
+MOM_daily = MOM_daily[!is.na(Decile)]
+MOM_daily[is.na(WRET)]
+MOM_daily[,]
+
+Merger = MOM_daily[ DATE >= "1990-07-01", sum(WRET, na.rm = T), by = .(DATE, Decile)]
 setorder(Merger, DATE, Decile)
 setnames(Merger, c("DATE", "DECILE", "RETURN"))
 Merger = Merger[ !is.na(DECILE)]
 setnames(daily_rf, c("DATE", "RETURN", "DECILE"))
 setcolorder(daily_rf, names(Merger))
 daily_rf = daily_rf[!is.na(RETURN)]
+setcolorder(daily_rf, names(Merger))
 Merger = rbind(Merger, daily_rf[DATE >= "1990-07-01" & DATE %in% Merger[, unique(DATE)]], fill = T)
 setorder(Merger, DATE, DECILE)
 
@@ -555,37 +676,41 @@ CDAX_Merge = CDAX_IND[, .(DATE, DECILE, RETURN)]
 setcolorder(CDAX_Merge, names(Merger))
 Merger = rbind(Merger, CDAX_Merge[DATE >= "1990-07-01" & DATE %in% Merger[, unique(DATE)]], fill = T )
 setorder(Merger, DATE, DECILE)
-Mergerwml = Merger[,.( DATE = unique(DATE),RETURN = (as.numeric(Merger[DECILE == 10, RETURN]) - as.numeric(Merger[DECILE == 1, RETURN]))) ]
+Mergerwml = Merger[,.( DATE = unique(DATE),RETURN = (as.numeric(Merger[DECILE == 10, RETURN]) - as.numeric(Merger[DECILE == 1, RETURN])))]
 Mergerwml[, DECILE := "WML"] ; setcolorder(Mergerwml, names(Merger))
 Merger= rbind(Merger, Mergerwml, fill = T)
 setorder(Merger, DATE, DECILE)
-Merger[, value_of_a_euro := cumprod(as.numeric(RETURN)+1), by = .(DECILE)]
+Merger[, value_of_a_euro := cumprod(1+as.numeric(RETURN)), by = .(DECILE)]
 
 ## calculate the daily skewness
 skewness_wml_d = skewness(Merger[DECILE == "WML", RETURN])
 skewness_w_d = skewness(Merger[DECILE == 10, RETURN])
 skewness_l_d = skewness(Merger[DECILE == 1, RETURN])
 
-sd(Merger[DECILE == 10, RETURN])
-
+skewness(MOM_daily[Decile == 10, RETURN]-MOM_daily[Decile == 1, RETURN])
+skewness(Merger[DECILE =="MARKET", RETURN])
 
 ### Generate the plot comparing the cumulative monthly return of past winner, loser, rf, and market portfolio
-
-MOM_Data_l = melt(MOM_Data, id.vars = c("DATE", measure.vars = x()) )
 
 MOM_Data_l = melt(MOM_Data[DATE > "1990-07"], id.vars = c("DATE"), measure.vars = c("value_of_a_euro_winners", "value_of_a_euro_losers", "value_of_a_euro_rf", "value_of_a_euro_rm"),  na.rm = T)
 setnames(MOM_Data_l, c("DATE", "PORTFOLIO", "VALUE"))
 MOM_Data_l[, DATE := ym(DATE)]
 
+setorder(MOM_Data_l, DATE, PORTFOLIO)
 
-
-ggplot(MOM_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
+#MOM_over_time = 
+  options(scipen = 10000)
+  ggplot(MOM_Data_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PORTFOLIO))+
   geom_line() +
   xlab("Date") + ylab("Portfolio Value") +
   theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
-  scale_colour_discrete(labels = c("Winners", "Losers", "Risk-Free", "Market")) +
+  scale_colour_discrete(labels = c("Winners", "Losers", "Risk-free", "Market")) +
   scale_y_continuous(trans="log10") +
-  scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years") + theme_classic()
+  scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years") +theme_sjplot2()
+ggsave( paste0(path_to_output,"MOM_over_time.pdf"), plot = MOM_over_time,)
+
+
+
 
 
 ### Investigate the corona crisis
@@ -761,8 +886,7 @@ ggplot(Beta_plot[DATE >= "2019-01-01" & DATE <= "2024-11-30"], aes(x = DATE, y =
   theme(legend.position = c(0.09,0.88), legend.title = element_blank()) +
   scale_colour_discrete(labels = c("Winners","Losers")) +
   scale_x_date(labels = function(date) {year(date)}, date_breaks = "1 years") +
-  scale_y_continuous(breaks = c(seq(-2,6,1)))+
-  theme_bw()
+  scale_y_continuous(breaks = c(seq(-2,6,1)))+ theme_sjplot2()
 
 ## Beta development Euro-area crisis
 ggplot(Beta_plot[DATE >= "2007-01-01"& DATE <= "2012-12-31"], aes(x = DATE, y = Beta, group = Portfolio, color = Portfolio))+
