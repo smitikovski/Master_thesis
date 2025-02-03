@@ -147,11 +147,6 @@ setkey(FSE_daily_p, DATE)
 
 
 ###Calculate the Stock returns for the portfolio returns
- # Melt DT to calc the monthly returns
-
-#FSE_monthly_p_l = melt(FSE_monthly_p, id.vars = c("Date"))
-#FSE_monthly_p_l[, value := as.numeric(value)]
-#FSE_monthly_p_l[, Return := as.numeric((value - shift(value, n = 1)) / shift(value, n = 1)), by = variable]
 
 # Calculate the daily stock returns
 Market_value_cols = grepl("MARKET VALUE", colnames(FSE_daily_p))
@@ -168,6 +163,8 @@ FSE_daily_p_l[, Stock := as.character(Stock)]
 
 ######## No. of stocks
 uniqueN(FSE_daily_p_l$Stock)
+
+## Convert to numeric
 FSE_daily_p_l[, Price := as.numeric(Price)]
 FSE_daily_p_l[, MV := as.numeric(MV)]
 
@@ -181,7 +178,6 @@ FSE_daily_p_l = FSE_daily_p_l[Monthly_Return <= 9.9 | is.na(Monthly_Return)]
 #FSE_daily_p_l[!is.na(Daily_Return)]
 
 # Get the monthly returns, market value at the end of the months and the 11 month returns from daily data
-
 ### new new new first record per month extraction since ceiling date does not work
 FSE_Daily[, DATE := as.Date(DATE)]
 
@@ -234,12 +230,11 @@ FSE_ceiling[, Return_1M := fifelse(shift(Price, n = 1) == 0 | Price == 0, NA_rea
 FSE_ceiling = FSE_ceiling[!is.na(Price)]
 
 FSE_ceiling[Decile == 5 & DATE == "2020-01", mean(Return_1M, na.rm = T)] 
-##### Cleansing of stock return data
-## Cleanse return spikes
-#FSE_ceiling = FSE_ceiling[Return_1M <= 9.9 | is.na(Return_1M)]
+
+
+
 
 ## Cleanse strong monthly return reversals
-#FSE_ceiling = FSE_ceiling[!(Return_1M >= 3 | shift(Return_1M, n=1) >= 3 | is.na(Return_1M) & (1+shift(Return_1M, n=1))*(1+Return_1M) < 0.5) | is.na(Return_1M)]
 setorder(FSE_ceiling, DATE, Stock)
 
 ### Get ceiling dates for the daily data of CDAX Performance Index for the calc of monthly returns
@@ -258,16 +253,6 @@ FSE_ceiling[, Decile := fifelse(
                  include.lowest = TRUE, labels = FALSE)),
   NA_integer_), by = DATE]
 
-#FSE_ceiling[, Decile := fifelse(
-#  !is.na(REL_RET),  
-#  as.integer(cut(REL_RET,
-#                 breaks = quantile(REL_RET, probs = seq(0, 1, 0.2), na.rm = TRUE),
-#                 include.lowest = TRUE, labels = FALSE)),
-#  NA_integer_), by = DATE]
-
-FSE_ceiling[Decile == 1 & DATE == "2020-01" & is.na(WRET)]
-
-
 # Replace values based on inactivity for 3 months - subsequent value = NA after first month if 3 months consecutive same price
 FSE_ceiling[, Price := {
   unchanged_count <- rleid(Price)
@@ -281,16 +266,11 @@ FSE_ceiling[, Price := {
 }, by = Stock]
 
 
-
-FSE_daily_p_l[, .(Unique_Stocks = uniqueN(Stock)), by = DATE][Unique_Stocks < 11, DATE]
-FSE_ceiling[!is.na(Price), .(Stocks_Non_NA = uniqueN(Stock)), by = DATE][Stocks_Non_NA < 11, DATE]
-FSE_ceiling[DATE == "2020-05" & !is.na(Price)]
-
 # Weighting the stocks within their deciles according to their market cap - as it is a value weighted portfolio
 FSE_ceiling[, WEIGHT := REL_MV/sum(REL_MV), by = .(DATE, Decile)]
 FSE_ceiling[, WRET := Return_1M*WEIGHT]
 
-#FSE_ceiling[, WRET := mean(Return_1M, na.rm = T), by =.(DATE, Decile)]
+
 
 FSE_ceiling[, mean(Return_1M, na.rm = T), by =.(DATE, Decile)]
 
@@ -1036,7 +1016,7 @@ MOM_Data[, MKT_R_VAR := shift(MKT_R_VAR, n = 1)]
 #### Forecasting future WML Returns
 Exp_WML_Ret_reg = lm(data = MOM_Data, WML ~ IB_1*MKT_R_VAR )
 summary(Exp_WML_Ret_reg)
-
+stargazer(Exp_WML_Ret_reg)
 
 
 
@@ -1061,14 +1041,14 @@ merged_data_with_volatility <- merge(merged_data, volatility_df, by = "DATE", al
 ## Regress 22 future realized vola on 126 day past and garch vola
 vola_reg = lm(data = merged_data_with_volatility, future_sd_22 ~ past_sd_126 + Estimated_Volatility)
 summary(vola_reg)
-stargazer(vola_reg)
+stargazer(vola_reg, notes = "Regression of 22-day future realized volatility of the WML portfolio on past 126-day realized WML volatility and GJR-GARCH volatility estimate.")
 
 
 cWML_sigma = as.data.table(vola_reg$fitted.values)
 setnames(cWML_sigma, "cWML_s")
 shifted = data.frame(DATE = merged_data_with_volatility$DATE[126:8865], cWML_s = cWML_sigma)
 merged_data_with_volatility= merge(merged_data_with_volatility, shifted, by = "DATE", all.x = T)
-#merged_data_with_volatility[, cWML_s.y:= NULL]
+
 
 Exp_WML_Ret_reg$fitted.values
 cWML_mu = as.data.table(Exp_WML_Ret_reg$fitted.values)
@@ -1106,7 +1086,7 @@ MOM_Data_cWML[ WML_Weight <  0, WML_Weight:= 0]
 ####  Recalculate the return of the Portfolio with dynamic weighting
 MOM_Data_cWML[,DYNWML := WML_Weight*WML + (1-WML_Weight)*RF_1M_M]
 
-MOM_Data_cWML[, ((1+var(DYNWML, na.rm = T))**12)-1]
+MOM_Data_cWML[, sd(DYNWML, na.rm = T)*sqrt(12)]
 comp_res = MOM_Data_cWML[, .(DATE, WML, DYNWML)]
 comp_res = comp_res[!is.na(DYNWML)]
 
@@ -1131,10 +1111,15 @@ DWML = ggplot(comp_res_l, aes(x = DATE, y = VALUE, group = PORTFOLIO, color = PO
   scale_x_date(labels = function(date) {year(date)}, date_breaks = "5 years")+ theme_sjplot2()
 ggsave( paste0(path_to_output,"DWML.pdf"), plot = DWML,height = 5.5, width = 7.5)
 
+MOM_Data_cWML[,EX_RET_DYN := DYNWML-RF_1M_M]
+
+DYNWML_reg = lm(EX_RET_DYN~EX_RET_MKT, data = MOM_Data_cWML)
+summary(DYNWML_reg)
 
 
+Sharpe_Ratio_DYNWML_ALL = MOM_Data_cWML[DATE > "1990-06"& !is.na(RF_1M), (mean(DYNWML, na.rm = T)/sd(DYNWML, na.rm = T))*sqrt(12)]
+MOM_Data_cWML[DATE > "1990-06"& !is.na(RF_1M), sd(DYNWML, na.rm = T)]*sqrt(12)
+Sharpe_Ratio_DYNWML_ALL
 
-
-
-
-
+MOM_Data_cWML[DATE > "1990-06"& !is.na(RF_1M), skewness(DYNWML)]
+merged_data_with_volatility
